@@ -1,33 +1,31 @@
 # Nexus Forge
-Data analytics + ML + AI + cybersecurity + software engineering in one project.
+
+Data analytics, machine learning, AI document Q&A and cybersecurity log analysis in one open source platform.
+Static frontend (no build step) plus an optional FastAPI backend. Every tool also runs in the browser when the API is offline.
+
+## Pages
+`/` home, `/workspace` tools, `/monitor` log analysis, `/architecture`, `/about` credentials, `/faq`, custom `404`.
+SEO files: `sitemap.xml`, `robots.txt`, `llms.txt`, `.well-known/security.txt`, web manifest, favicons and a 1200x630 share image.
 
 ## Run locally
-    cd backend && pip install -r requirements.txt && uvicorn main:app --reload
-    # open frontend/index.html (or: python -m http.server 8080 -d frontend)
-    # to point the site at the API: localStorage.setItem('api','http://localhost:8000')
+    cd backend && pip install -r requirements.txt && ADMIN_PASSWORD=choose-one uvicorn main:app --reload
+    npx serve frontend            # clean URLs such as /workspace work
+    # point the site at the API: localStorage.setItem('api','http://localhost:8000')
+Or: `docker compose up --build` (site on :8080, API docs on :8000/docs).
 
-## Run with Docker
-    docker compose up --build   # site: :8080  api: :8000/docs
-
-## Env vars
-SECRET_KEY, ADMIN_PASSWORD (defaults are for demo only; change them), GROQ_API_KEY (optional), ORIGINS (your site URL).
-
-## Test
-    cd backend && pytest -q
-
-## Phase 2 additions
-- /api/anomaly (IQR + z-score), /api/rag/add and /api/rag/ask (TF-IDF retrieval, optional Groq answer), /api/history (login required)
-- SQLite storage (DB_PATH), per-IP rate limit (RATE_LIMIT per minute)
-- Frontend: anomaly chart, document Q&A, password audit (browser only), sign-in, simulated threat monitor, credentials section
-- Deploy: render.yaml for the API, .env.example for settings
-
-## Phase 3 to 5 (v2.0)
-- Synthora-style hero (video glow), Anta font, ember palette
-- k-means and nearest-neighbour endpoints, CSV upload, signup/login (PBKDF2), log ingest feeding the threat monitor, /api/metrics
-- PWA (manifest + service worker), report export, Vercel headers (frontend/vercel.json)
-- CI runs tests and builds the Docker image; SECURITY.md lists production settings
+## Configuration
+Backend env vars: `SECRET_KEY`, `ADMIN_PASSWORD` (admin is disabled without it), `GROQ_API_KEY` (optional), `ORIGINS`, `RATE_LIMIT`. See `.env.example`.
+Frontend: set your API origin in `frontend/assets/config.js`.
 
 ## Deploy
-1. Backend on Render (render.yaml). Set ADMIN_PASSWORD, SECRET_KEY, ORIGINS.
-2. Put the Render URL in `<meta name="api-base">` in frontend/index.html.
+1. Backend on Render using `render.yaml` (root directory `backend`).
+2. Put the Render URL in `frontend/assets/config.js`.
 3. Frontend on Vercel with Root Directory `frontend`.
+4. Custom domain: add it in Vercel, then run `sh scripts/set-domain.sh https://yourdomain.com` and push.
+
+## Quality gates (CI)
+`python scripts/check_site.py` verifies one h1, unique titles and descriptions, canonicals, valid JSON-LD, alt text, working internal links and anchors, sitemap coverage, strict-CSP-safe markup and that no source maps ship.
+`pytest` covers the API. The Docker image is built on every push.
+
+## Security
+See `SECURITY.md`. A strict Content-Security-Policy and other headers are set in `frontend/vercel.json`.
