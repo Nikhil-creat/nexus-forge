@@ -20,7 +20,7 @@ call('/api/logs/ingest',{lines:$('logs').value.split('\n')}).catch(()=>{});
 $('o3').innerHTML='<span class="risk-'+r.level+'">Risk '+r.risk+'/100 ('+r.level+')</span>\n'+esc(JSON.stringify({findings:r.findings,brute_force_ips:r.brute_force_ips},null,2))}
 
 async function ask(){const m=$('msg').value.trim();if(!m)return;const log=$('chatlog');log.insertAdjacentHTML('beforeend','<p class="me">You: '+esc(m)+'</p>');$('msg').value='';
-try{const r=await call('/api/chat',{message:m});log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(r.reply)+'</p>')}catch(e){try{const t=await llm(SYSP,m);log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(t)+'</p>')}catch(x){log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(x.message)+'</p>')}}log.scrollTop=log.scrollHeight}
+try{const r=await call('/api/chat',{message:m});log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(r.reply)+'</p>')}catch(e){try{const t=await llm(SYSP,m,HIST);HIST=HIST.concat([{role:'user',content:m},{role:'assistant',content:t}]).slice(-6);log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(t)+'</p>')}catch(x){const o=kbAnswer(m);log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(x.message)+(o?'\n\nOffline answer: '+esc(o):'')+'</p>')}}log.scrollTop=log.scrollHeight}
 $('msg').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});
 
 let TOKEN='',DOCS=[];
@@ -69,19 +69,49 @@ function keyOf(){const el=$('gkey'),v=el&&el.value?String(el.value).replace(/["'
 function provider(k){if(k.startsWith('gsk_'))return'Groq';if(k.startsWith('sk-ant-'))return'Anthropic';if(k.startsWith('sk-or-'))return'OpenRouter';if(k.startsWith('AIza'))return'Gemini';if(k.startsWith('sk-'))return'OpenAI';return''}
 function saveKey(el){const k=String(el.value).replace(/["'\s]/g,'');try{sessionStorage.setItem('aikey',k)}catch(e){}const p=provider(k);
 $('kstatus').textContent=!k?'No key entered. Groq, Gemini, Anthropic, OpenRouter and OpenAI keys are detected automatically.':p?'Detected: '+p+'. The key stays in this tab.':'Key format not recognized. Supported: Groq, Gemini, Anthropic, OpenRouter, OpenAI.'}
-async function llm(sys,user){const k=keyOf(),p=provider(k);
+const CHAIN={Groq:['llama-3.3-70b-versatile','llama-3.1-8b-instant'],OpenRouter:['openrouter/auto'],OpenAI:['gpt-4o-mini'],Gemini:['gemini-flash-latest','gemini-flash-lite-latest'],Anthropic:['claude-haiku-5-5']};
+const CACHE=new Map();let busy=false,reqs=0,HIST=[];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function note(t){const e=$('kstatus');if(e)e.textContent=t}
+async function send(p,k,model,sys,hist,u){const J={'Content-Type':'application/json'},msgs=hist.concat([{role:'user',content:u}]);let url,opt;
+if(p==='Gemini'){url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent';opt={method:'POST',headers:{...J,'x-goog-api-key':k},body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:msgs.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]})),generationConfig:{maxOutputTokens:1024}})}}
+else if(p==='Anthropic'){url='https://api.anthropic.com/v1/messages';opt={method:'POST',headers:{...J,'x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:700,system:sys,messages:msgs})}}
+else{url={Groq:'https://api.groq.com/openai/v1/chat/completions',OpenRouter:'https://openrouter.ai/api/v1/chat/completions',OpenAI:'https://api.openai.com/v1/chat/completions'}[p];opt={method:'POST',headers:{...J,Authorization:'Bearer '+k},body:JSON.stringify(Object.assign({model,messages:[{role:'system',content:sys}].concat(msgs)},p==='OpenAI'?{max_completion_tokens:700}:{max_tokens:700}))}}
+const r=await fetch(url,opt);
+if(!r.ok){let m='';try{const d=await r.json();m=(d.error&&(d.error.message||d.error))||d.message||''}catch(e){}throw{status:r.status,msg:String(m).slice(0,160),wait:Number(r.headers&&r.headers.get&&r.headers.get('retry-after'))||0}}
+const d=await r.json();return p==='Gemini'?d.candidates[0].content.parts[0].text:p==='Anthropic'?d.content[0].text:d.choices[0].message.content}
+function explain(p,e){const s=e&&e.status,m=e&&e.msg?' Provider says: '+e.msg:'';
+if(s===429)return p+' says you are over its rate or quota limit (HTTP 429).'+m+' Wait a minute and try again, check your usage in the provider console, or paste a key from another provider.';
+if(s===404)return p+' could not find the model (HTTP 404).'+m+' Type a current model name in the Model box.';
+return 'Detected '+p+', but the request failed (HTTP '+s+').'+m}
+async function llm(sys,user,hist){hist=hist||[];const k=keyOf(),p=provider(k);
 if(!k)throw new Error('No AI is connected. Paste an API key above (Groq, Gemini, Anthropic, OpenRouter or OpenAI) or connect the backend.');
 if(!p)throw new Error('Key format not recognized. Supported: Groq, Gemini, Anthropic, OpenRouter, OpenAI.');
-const u=user.slice(0,6000),J={'Content-Type':'application/json'},ok=async r=>{if(!r.ok)throw r.status;return r.json()};
-const oa=(url,model)=>fetch(url,{method:'POST',headers:{...J,Authorization:'Bearer '+k},body:JSON.stringify({model,messages:[{role:'system',content:sys},{role:'user',content:u}]})}).then(ok).then(d=>d.choices[0].message.content);
-let run;
-if(p==='Groq')run=oa('https://api.groq.com/openai/v1/chat/completions','llama-3.3-70b-versatile');
-else if(p==='OpenRouter')run=oa('https://openrouter.ai/api/v1/chat/completions','openrouter/auto');
-else if(p==='OpenAI')run=oa('https://api.openai.com/v1/chat/completions','gpt-4o-mini');
-else if(p==='Gemini')run=fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',{method:'POST',headers:{...J,'x-goog-api-key':k},body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:[{role:'user',parts:[{text:u}]}]})}).then(ok).then(d=>d.candidates[0].content.parts[0].text);
-else run=fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{...J,'x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-5-5',max_tokens:700,system:sys,messages:[{role:'user',content:u}]})}).then(ok).then(d=>d.content[0].text);
-try{return await run}catch(e){throw new Error('Detected '+p+', but the request failed'+(typeof e==='number'?' (HTTP '+e+')':' (network error or the provider blocked browser access)')+'. Check the key, quota and connection.')}}
-async function testKey(){const st=$('kstatus');st.textContent='Testing the key...';try{const r=await llm('Reply with the single word OK.','ping');st.textContent='Connected to '+provider(keyOf())+'. The model replied: '+r.slice(0,40)}catch(e){st.textContent=e.message}}
+const ov=$('gmodel')&&$('gmodel').value?String($('gmodel').value).trim():'',chain=ov?[ov]:CHAIN[p],u=user.slice(0,6000),ck=p+'|'+chain[0]+'|'+sys+'|'+JSON.stringify(hist)+'|'+u;
+if(CACHE.has(ck))return CACHE.get(ck);
+if(busy)throw new Error('Wait for the previous answer to finish.');busy=true;let last;
+try{for(const model of chain){for(let a=0;a<2;a++){try{note('Asking '+p+' ('+model+')...');reqs++;const t=await send(p,k,model,sys,hist,u);CACHE.set(ck,t);if(CACHE.size>30)CACHE.delete(CACHE.keys().next().value);note('Connected to '+p+' using '+model+'. Requests this tab: '+reqs);return t}
+catch(e){last=e;if(typeof e.status!=='number')throw new Error('Detected '+p+', but the browser could not reach it (network error, or the provider blocks browser access).');
+if(e.status===401||e.status===403)throw new Error('Detected '+p+', but the key was rejected (HTTP '+e.status+'). Create a new key and paste it again.');
+if((e.status===429||e.status===503)&&a===0){const w=Math.min(e.wait||3,15);note(p+' is busy (HTTP '+e.status+'). Retrying in '+w+'s...');await sleep(w*1000);continue}
+break}}}}finally{busy=false}
+note(explain(p,last));throw new Error(explain(p,last))}
+const KB=[[['outlier','anomal'],'An outlier is a value far from the rest of the data. Common rules flag points beyond 1.5 times the interquartile range from the quartiles, or more than 3 standard deviations from the mean.'],
+[['regression','slope','r2','r²'],'Linear regression fits the line y = slope x + intercept that minimises squared error. R² shows how much of the variation the line explains; 1 is a perfect fit.'],
+[['k-means','kmeans','cluster','inertia'],'k-means groups points into k clusters by assigning each point to the nearest centroid and moving each centroid to the mean of its points. Inertia is the sum of squared distances to the centroids; lower means tighter clusters.'],
+[['nearest','knn','classif'],'k-nearest neighbours classifies a point by the majority label among its k closest training points. Leave-one-out accuracy estimates how well it generalises.'],
+[['rag','retrieval'],'Retrieval-augmented generation finds relevant passages in your documents first and gives them to a language model, so answers stay grounded in your sources.'],
+[['overfit'],'Overfitting is when a model memorises noise in the training data and does worse on new data. Hold out test data or use cross-validation to detect it.'],
+[['precision','recall','f1'],'Precision is the share of predicted positives that are correct. Recall is the share of actual positives that were found. F1 is their harmonic mean.'],
+[['sql'],'SQL injection inserts SQL into an input so the database runs it. Prevent it with parameterised queries and least-privilege database accounts.'],
+[['xss','cross-site'],'Cross-site scripting injects script into a page that other people view. Prevent it by escaping output, setting a strict Content-Security-Policy and avoiding innerHTML with untrusted data.'],
+[['brute','password'],'A brute-force attack tries many passwords. Defend with rate limiting, lockouts or delays, long unique passwords and multi-factor authentication.'],
+[['aes','encrypt','gcm'],'AES-256-GCM is authenticated encryption: it hides the data and detects tampering. Here the key is derived from your passphrase with PBKDF2 and a random salt.'],
+[['sha','hash','checksum','fingerprint'],'SHA-256 turns any file into a 256-bit fingerprint. Any change to the file changes the hash, so matching hashes show a download is intact.'],
+[['standard deviation','std','spread'],'Standard deviation measures how spread out values are around the mean.']];
+function kbAnswer(q){q=q.toLowerCase();let best='',n=0;KB.forEach(([ks,t])=>{const c=ks.filter(x=>q.includes(x)).length;if(c>n){n=c;best=t}});return best}
+function clearChat(){HIST=[];const l=$('chatlog');if(l)l.innerHTML=''}
+async function testKey(){const st=$('kstatus');st.textContent='Testing the key...';try{const r=await llm('Reply with the single word OK.','ping '+Date.now());st.textContent='Connected to '+provider(keyOf())+'. The model replied: '+r.slice(0,40)}catch(e){st.textContent=e.message}}
 async function explainData(){const t=$('o1').textContent;if(!t||t.startsWith('Results appear')){$('oai').textContent='Press Analyze data first.';return}
 $('oai').textContent='Thinking...';try{$('oai').textContent=await llm('You are a careful data analyst. Explain the findings in plain language, point out outliers and data quality issues, and suggest next steps. Be concise.','Column statistics:\n'+t)}catch(e){$('oai').textContent=e.message}}
 (function(){const k=keyOf();if(k&&$('gkey')){$('gkey').value=k;saveKey($('gkey'))}})();
