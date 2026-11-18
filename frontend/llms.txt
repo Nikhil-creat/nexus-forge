@@ -5,11 +5,11 @@
 Nexus Forge runs as static pages with an optional FastAPI backend. Every analysis tool also works in the browser when the API is offline.
 
 ## Pages
-- [Workspace](https://nexus-forge.vercel.app/workspace): CSV analytics, regression, clustering, classification, anomaly detection and document Q&A
-- [Threat monitor](https://nexus-forge.vercel.app/monitor): log analysis for injection attempts and brute-force logins
-- [Architecture](https://nexus-forge.vercel.app/architecture): technology stack and how the parts connect
-- [Credentials](https://nexus-forge.vercel.app/about): education, internships and certifications of the builder
-- [FAQ](https://nexus-forge.vercel.app/faq): common questions about hosting and configuration
+- [Workspace](https://yourdomain.com/workspace): CSV analytics, regression, clustering, classification, anomaly detection and document Q&A
+- [Threat monitor](https://yourdomain.com/monitor): log analysis for injection attempts and brute-force logins
+- [Architecture](https://yourdomain.com/architecture): technology stack and how the parts connect
+- [Credentials](https://yourdomain.com/about): education, internships and certifications of the builder
+- [FAQ](https://yourdomain.com/faq): common questions about hosting and configuration
 
 ## Source
 - [GitHub repository](https://github.com/Nikhil-creat/nexus-forge): code, tests and deployment files
