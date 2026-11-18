@@ -20,7 +20,7 @@ call('/api/logs/ingest',{lines:$('logs').value.split('\n')}).catch(()=>{});
 $('o3').innerHTML='<span class="risk-'+r.level+'">Risk '+r.risk+'/100 ('+r.level+')</span>\n'+esc(JSON.stringify({findings:r.findings,brute_force_ips:r.brute_force_ips},null,2))}
 
 async function ask(){const m=$('msg').value.trim();if(!m)return;const log=$('chatlog');log.insertAdjacentHTML('beforeend','<p class="me">You: '+esc(m)+'</p>');$('msg').value='';
-try{const r=await call('/api/chat',{message:m});log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(r.reply)+'</p>')}catch(e){try{const t=await groqDirect(m);log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(t)+'</p>')}catch(x){log.insertAdjacentHTML('beforeend','<p>Nexus: No AI is connected. Paste a Groq API key above (kept in this tab only) or connect the backend.</p>')}}log.scrollTop=log.scrollHeight}
+try{const r=await call('/api/chat',{message:m});log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(r.reply)+'</p>')}catch(e){try{const t=await llm(SYSP,m);log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(t)+'</p>')}catch(x){log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(x.message)+'</p>')}}log.scrollTop=log.scrollHeight}
 $('msg').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});
 
 let TOKEN='',DOCS=[];
@@ -34,7 +34,9 @@ let r;try{r=await call('/api/anomaly',{values:v})}catch(e){r=iqrFlags(v)}drawSer
 const tk=t=>t.toLowerCase().match(/[a-z0-9]+/g)||[];
 async function addDoc(){const t=$('doc').value;try{const r=await call('/api/rag/add',{title:'pasted',text:t});$('o5').textContent='Indexed '+r.chunks+' passages on the server.'}catch(e){DOCS=t.split(/\n\s*\n/).filter(x=>x.trim().length>20);$('o5').textContent='Server offline. Indexed '+DOCS.length+' passages in your browser.'}}
 async function askDoc(){const q=$('q').value;try{const r=await call('/api/rag/ask',{question:q});$('o5').textContent=r.answer+'\n\nSources: '+r.sources.join(', ')+(r.mode?' ('+r.mode+')':'')}catch(e){const w=new Set(tk(q));
-const best=DOCS.map(d=>[tk(d).filter(x=>w.has(x)).length,d]).sort((a,b)=>b[0]-a[0])[0];$('o5').textContent=best&&best[0]?best[1]:'No match. Index a document first.'}}
+const top=DOCS.map(d=>[tk(d).filter(x=>w.has(x)).length,d]).sort((a,b)=>b[0]-a[0]).filter(x=>x[0]>0).slice(0,3).map(x=>x[1]);
+if(!top.length){$('o5').textContent='No match. Index a document first.';return}
+try{$('o5').textContent=await llm('Answer only from the context. If the answer is not there, say so. Be concise.','Context:\n'+top.join('\n\n')+'\n\nQuestion: '+q)}catch(x){$('o5').textContent=top[0]}}}
 function auditPw(){const p=$('pw').value;const pool=(/[a-z]/.test(p)?26:0)+(/[A-Z]/.test(p)?26:0)+(/\d/.test(p)?10:0)+(/\W/.test(p)?32:0);let bits=pool?Math.round(p.length*Math.log2(pool)):0;
 if(['password','123456','qwerty','admin','letmein','nexus123'].includes(p.toLowerCase()))bits=5;const lv=bits<40?'weak':bits<60?'fair':bits<80?'strong':'excellent';
 $('pwbar').style.width=Math.min(100,bits)+'%';$('pwbar').style.background=bits<40?'var(--rd)':bits<60?'var(--am)':'var(--ok)';$('o7').textContent=p?bits+' bits of entropy: '+lv:'Checked in your browser. Nothing is sent anywhere.'}
@@ -62,10 +64,26 @@ function exportReport(){const parts=[['Data analytics','o1'],['Regression','o2']
 const html='<!doctype html><meta charset="utf-8"><title>Nexus Forge report</title><body style="font-family:system-ui;max-width:720px;margin:2rem auto;padding:0 1rem"><h1>Nexus Forge report</h1><p>'+new Date().toLocaleString()+'</p>'+parts.map(([n,i])=>'<h2>'+n+'</h2><pre style="white-space:pre-wrap;background:#f4f4f4;padding:10px">'+esc($(i).textContent)+'</pre>').join('');
 const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));a.download='nexus-forge-report.html';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
-function saveKey(el){try{sessionStorage.setItem('groq',el.value.trim())}catch(e){}}
-async function groqDirect(m){let k='';try{k=sessionStorage.getItem('groq')||''}catch(e){}if(!k)throw 0;
-const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'system',content:'You are Nexus, an assistant for data analytics, ML and cybersecurity. Be concise.'},{role:'user',content:m.slice(0,2000)}]})});
-if(!r.ok)throw new Error(r.status);return (await r.json()).choices[0].message.content}
+const SYSP='You are Nexus, an assistant for data analytics, ML and cybersecurity. Be concise.';
+function keyOf(){try{return sessionStorage.getItem('aikey')||''}catch(e){return ''}}
+function provider(k){if(k.startsWith('gsk_'))return'Groq';if(k.startsWith('sk-ant-'))return'Anthropic';if(k.startsWith('sk-or-'))return'OpenRouter';if(k.startsWith('AIza'))return'Gemini';if(k.startsWith('sk-'))return'OpenAI';return''}
+function saveKey(el){const k=String(el.value).replace(/["'\s]/g,'');try{sessionStorage.setItem('aikey',k)}catch(e){}const p=provider(k);
+$('kstatus').textContent=!k?'No key entered. Groq, Gemini, Anthropic, OpenRouter and OpenAI keys are detected automatically.':p?'Detected: '+p+'. The key stays in this tab.':'Key format not recognized. Supported: Groq, Gemini, Anthropic, OpenRouter, OpenAI.'}
+async function llm(sys,user){const k=keyOf(),p=provider(k);
+if(!k)throw new Error('No AI is connected. Paste an API key above (Groq, Gemini, Anthropic, OpenRouter or OpenAI) or connect the backend.');
+if(!p)throw new Error('Key format not recognized. Supported: Groq, Gemini, Anthropic, OpenRouter, OpenAI.');
+const u=user.slice(0,6000),J={'Content-Type':'application/json'},ok=async r=>{if(!r.ok)throw r.status;return r.json()};
+const oa=(url,model)=>fetch(url,{method:'POST',headers:{...J,Authorization:'Bearer '+k},body:JSON.stringify({model,messages:[{role:'system',content:sys},{role:'user',content:u}]})}).then(ok).then(d=>d.choices[0].message.content);
+let run;
+if(p==='Groq')run=oa('https://api.groq.com/openai/v1/chat/completions','llama-3.3-70b-versatile');
+else if(p==='OpenRouter')run=oa('https://openrouter.ai/api/v1/chat/completions','openrouter/auto');
+else if(p==='OpenAI')run=oa('https://api.openai.com/v1/chat/completions','gpt-4o-mini');
+else if(p==='Gemini')run=fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',{method:'POST',headers:{...J,'x-goog-api-key':k},body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:[{role:'user',parts:[{text:u}]}]})}).then(ok).then(d=>d.candidates[0].content.parts[0].text);
+else run=fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{...J,'x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-5-5',max_tokens:700,system:sys,messages:[{role:'user',content:u}]})}).then(ok).then(d=>d.content[0].text);
+try{return await run}catch(e){throw new Error('Detected '+p+', but the request failed'+(typeof e==='number'?' (HTTP '+e+')':' (network error or the provider blocked browser access)')+'. Check the key, quota and connection.')}}
+async function explainData(){const t=$('o1').textContent;if(!t||t.startsWith('Results appear')){$('oai').textContent='Press Analyze data first.';return}
+$('oai').textContent='Thinking...';try{$('oai').textContent=await llm('You are a careful data analyst. Explain the findings in plain language, point out outliers and data quality issues, and suggest next steps. Be concise.','Column statistics:\n'+t)}catch(e){$('oai').textContent=e.message}}
+(function(){const k=keyOf();if(k&&$('gkey')){$('gkey').value=k;saveKey($('gkey'))}})();
 function drawHist(){const c=$('hist');if(!c)return;const L=$('csv').value.trim().split('\n').map(l=>l.split(',')),h=L.shift();let ci=-1,v=[];
 for(let i=0;i<h.length&&ci<0;i++){const cells=L.map(r=>(r[i]||'').trim()).filter(Boolean),n=cells.map(Number);if(n.length>=3&&n.every(x=>!isNaN(x))){ci=i;v=n}}
 const x=c.getContext('2d'),w=c.width=c.clientWidth*2,H=c.height=200;x.clearRect(0,0,w,H);if(ci<0)return;const mn=Math.min(...v),mx=Math.max(...v),B=8,k=Array(B).fill(0);

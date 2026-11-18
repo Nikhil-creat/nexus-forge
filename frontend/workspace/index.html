@@ -12,7 +12,7 @@
 31,52000,Hyderabad
 28,45000,Hyderabad
 45,90000,Chennai
-52,400000,Chennai</textarea><p><button class="btn" data-act="runAnalytics">Analyze data</button></p><canvas id="hist" class="chart" role="img" aria-label="Histogram of the first numeric column"></canvas><pre class="out" id="o1">Results appear here.</pre></div>
+52,400000,Chennai</textarea><p><button class="btn" data-act="runAnalytics">Analyze data</button> <button class="btn alt" data-act="explainData">Explain with AI</button></p><canvas id="hist" class="chart" role="img" aria-label="Histogram of the first numeric column"></canvas><pre class="out" id="o1">Results appear here.</pre><pre class="out" id="oai" aria-live="polite">The AI explanation appears here once you add an API key.</pre></div>
 
 <div class="card"><h2 class="h3">Machine learning</h2><label for="xs">x values</label><input id="xs" value="1,2,3,4,5"><label for="ys">y values</label><input id="ys" value="2.1,4.2,5.9,8.1,10.2"><label for="px">Predict y for x =</label><input id="px" value="8">
 <p><button class="btn" data-act="runML">Fit and predict</button></p><pre class="out" id="o2">Results appear here.</pre></div>
@@ -23,7 +23,7 @@ Failed login from 10.0.0.5
 Failed login from 10.0.0.5
 Invalid password from 10.0.0.5</textarea><p><button class="btn" data-act="runScan">Scan</button></p><pre class="out" id="o3">Results appear here.</pre></div>
 
-<div class="card"><h2 class="h3">AI assistant</h2><label for="gkey">Groq API key (optional, kept in this tab only)</label><input id="gkey" type="password" autocomplete="off" data-chg="saveKey"><div id="chatlog" aria-live="polite"></div><label for="msg">Ask a question</label><input id="msg" placeholder="Explain what an outlier is">
+<div class="card"><h2 class="h3">AI assistant</h2><label for="gkey">AI API key (optional, kept in this tab only)</label><input id="gkey" type="password" autocomplete="off" data-inp="saveKey"><p class="mono" id="kstatus" aria-live="polite">No key entered. Groq, Gemini, Anthropic, OpenRouter and OpenAI keys are detected automatically.</p><div id="chatlog" aria-live="polite"></div><label for="msg">Ask a question</label><input id="msg" placeholder="Explain what an outlier is">
 <p><button class="btn" data-act="ask">Send</button></p></div>
 </div></section><section id="lab"><h2>Lab</h2><p class="sub">Anomaly detection, document Q&amp;A, password audit and a protected history.</p>
 <div class="grid">
