@@ -77,7 +77,7 @@ for n, h in html.items():
         elif frag and frag not in ids_of(open(full, encoding="utf-8").read()):
             errs.append(f"{n}: missing anchor #{frag} in {a}")
     js, loaded = "", []
-    for s in re.findall(r'src="[^"]*assets/(\w+)\.js"', h):
+    for s in re.findall(r'src="[^"]*assets/(\w+)\.js(?:\?[^"]*)?"', h):
         body = open(f"{R}/assets/{s}.js", encoding="utf-8").read()
         js += body
         if s not in ("core", "config"):

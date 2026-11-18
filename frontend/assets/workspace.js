@@ -65,7 +65,7 @@ const html='<!doctype html><meta charset="utf-8"><title>Nexus Forge report</titl
 const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));a.download='nexus-forge-report.html';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
 const SYSP='You are Nexus, an assistant for data analytics, ML and cybersecurity. Be concise.';
-function keyOf(){try{return sessionStorage.getItem('aikey')||''}catch(e){return ''}}
+function keyOf(){const el=$('gkey'),v=el&&el.value?String(el.value).replace(/["'\s]/g,''):'';if(v)return v;try{return sessionStorage.getItem('aikey')||''}catch(e){return ''}}
 function provider(k){if(k.startsWith('gsk_'))return'Groq';if(k.startsWith('sk-ant-'))return'Anthropic';if(k.startsWith('sk-or-'))return'OpenRouter';if(k.startsWith('AIza'))return'Gemini';if(k.startsWith('sk-'))return'OpenAI';return''}
 function saveKey(el){const k=String(el.value).replace(/["'\s]/g,'');try{sessionStorage.setItem('aikey',k)}catch(e){}const p=provider(k);
 $('kstatus').textContent=!k?'No key entered. Groq, Gemini, Anthropic, OpenRouter and OpenAI keys are detected automatically.':p?'Detected: '+p+'. The key stays in this tab.':'Key format not recognized. Supported: Groq, Gemini, Anthropic, OpenRouter, OpenAI.'}
@@ -81,6 +81,7 @@ else if(p==='OpenAI')run=oa('https://api.openai.com/v1/chat/completions','gpt-4o
 else if(p==='Gemini')run=fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',{method:'POST',headers:{...J,'x-goog-api-key':k},body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:[{role:'user',parts:[{text:u}]}]})}).then(ok).then(d=>d.candidates[0].content.parts[0].text);
 else run=fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{...J,'x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-5-5',max_tokens:700,system:sys,messages:[{role:'user',content:u}]})}).then(ok).then(d=>d.content[0].text);
 try{return await run}catch(e){throw new Error('Detected '+p+', but the request failed'+(typeof e==='number'?' (HTTP '+e+')':' (network error or the provider blocked browser access)')+'. Check the key, quota and connection.')}}
+async function testKey(){const st=$('kstatus');st.textContent='Testing the key...';try{const r=await llm('Reply with the single word OK.','ping');st.textContent='Connected to '+provider(keyOf())+'. The model replied: '+r.slice(0,40)}catch(e){st.textContent=e.message}}
 async function explainData(){const t=$('o1').textContent;if(!t||t.startsWith('Results appear')){$('oai').textContent='Press Analyze data first.';return}
 $('oai').textContent='Thinking...';try{$('oai').textContent=await llm('You are a careful data analyst. Explain the findings in plain language, point out outliers and data quality issues, and suggest next steps. Be concise.','Column statistics:\n'+t)}catch(e){$('oai').textContent=e.message}}
 (function(){const k=keyOf();if(k&&$('gkey')){$('gkey').value=k;saveKey($('gkey'))}})();
