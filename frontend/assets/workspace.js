@@ -3,7 +3,7 @@ h.forEach((c,i)=>{const v=L.map(r=>(r[i]||'').trim()).filter(Boolean);const n=v.
 if(v.length&&n.every(x=>!isNaN(x))){const m=n.reduce((a,b)=>a+b,0)/n.length,sd=Math.sqrt(n.reduce((a,b)=>a+(b-m)**2,0)/n.length);
 out.columns[c]={type:'number',mean:+m.toFixed(2),min:Math.min(...n),max:Math.max(...n),std:+sd.toFixed(2),outliers:n.filter(x=>sd&&Math.abs(x-m)>3*sd).length,missing:L.length-v.length}}
 else{const f={};v.forEach(x=>f[x]=(f[x]||0)+1);out.columns[c]={type:'text',unique:Object.keys(f).length,top:Object.entries(f).sort((a,b)=>b[1]-a[1]).slice(0,3),missing:L.length-v.length}}});return out}
-async function runAnalytics(){let r;try{r=await call('/api/analytics',{text:$('csv').value})}catch(e){try{r=localAnalytics($('csv').value)}catch(x){r={error:'Could not read the CSV. Check the header row.'}}}$('o1').textContent=JSON.stringify(r,null,2)}
+async function runAnalytics(){let r;try{r=await call('/api/analytics',{text:$('csv').value})}catch(e){try{r=localAnalytics($('csv').value)}catch(x){r={error:'Could not read the CSV. Check the header row.'}}}$('o1').textContent=JSON.stringify(r,null,2);drawHist()}
 
 function localML(x,y,p){const n=x.length,mx=x.reduce((a,b)=>a+b)/n,my=y.reduce((a,b)=>a+b)/n;const d=x.reduce((a,b)=>a+(b-mx)**2,0);if(!d)throw Error('x values must differ');
 const w=x.reduce((a,b,i)=>a+(b-mx)*(y[i]-my),0)/d,b0=my-w*mx;const sr=y.reduce((a,b,i)=>a+(b-(w*x[i]+b0))**2,0),st=y.reduce((a,b)=>a+(b-my)**2,0)||1;
@@ -20,7 +20,7 @@ call('/api/logs/ingest',{lines:$('logs').value.split('\n')}).catch(()=>{});
 $('o3').innerHTML='<span class="risk-'+r.level+'">Risk '+r.risk+'/100 ('+r.level+')</span>\n'+esc(JSON.stringify({findings:r.findings,brute_force_ips:r.brute_force_ips},null,2))}
 
 async function ask(){const m=$('msg').value.trim();if(!m)return;const log=$('chatlog');log.insertAdjacentHTML('beforeend','<p class="me">You: '+esc(m)+'</p>');$('msg').value='';
-try{const r=await call('/api/chat',{message:m});log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(r.reply)+'</p>')}catch(e){log.insertAdjacentHTML('beforeend','<p>Nexus: The server is offline. Start the backend to chat.</p>')}log.scrollTop=log.scrollHeight}
+try{const r=await call('/api/chat',{message:m});log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(r.reply)+'</p>')}catch(e){try{const t=await groqDirect(m);log.insertAdjacentHTML('beforeend','<p>Nexus: '+esc(t)+'</p>')}catch(x){log.insertAdjacentHTML('beforeend','<p>Nexus: No AI is connected. Paste a Groq API key above (kept in this tab only) or connect the backend.</p>')}}log.scrollTop=log.scrollHeight}
 $('msg').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});
 
 let TOKEN='',DOCS=[];
@@ -61,3 +61,12 @@ $('o9').textContent=JSON.stringify(r,null,2)}
 function exportReport(){const parts=[['Data analytics','o1'],['Regression','o2'],['Security scan','o3'],['Anomaly detection','o4'],['Document Q&A','o5'],['Clustering','o8'],['Classifier','o9']];
 const html='<!doctype html><meta charset="utf-8"><title>Nexus Forge report</title><body style="font-family:system-ui;max-width:720px;margin:2rem auto;padding:0 1rem"><h1>Nexus Forge report</h1><p>'+new Date().toLocaleString()+'</p>'+parts.map(([n,i])=>'<h2>'+n+'</h2><pre style="white-space:pre-wrap;background:#f4f4f4;padding:10px">'+esc($(i).textContent)+'</pre>').join('');
 const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));a.download='nexus-forge-report.html';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+
+function saveKey(el){try{sessionStorage.setItem('groq',el.value.trim())}catch(e){}}
+async function groqDirect(m){let k='';try{k=sessionStorage.getItem('groq')||''}catch(e){}if(!k)throw 0;
+const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'system',content:'You are Nexus, an assistant for data analytics, ML and cybersecurity. Be concise.'},{role:'user',content:m.slice(0,2000)}]})});
+if(!r.ok)throw new Error(r.status);return (await r.json()).choices[0].message.content}
+function drawHist(){const c=$('hist');if(!c)return;const L=$('csv').value.trim().split('\n').map(l=>l.split(',')),h=L.shift();let ci=-1,v=[];
+for(let i=0;i<h.length&&ci<0;i++){const cells=L.map(r=>(r[i]||'').trim()).filter(Boolean),n=cells.map(Number);if(n.length>=3&&n.every(x=>!isNaN(x))){ci=i;v=n}}
+const x=c.getContext('2d'),w=c.width=c.clientWidth*2,H=c.height=200;x.clearRect(0,0,w,H);if(ci<0)return;const mn=Math.min(...v),mx=Math.max(...v),B=8,k=Array(B).fill(0);
+v.forEach(a=>k[Math.min(B-1,Math.floor((a-mn)/((mx-mn)||1)*B))]++);const top=Math.max(...k),bw=(w-40)/B;x.fillStyle='#ff9a3c';k.forEach((n,i)=>x.fillRect(20+i*bw+4,H-20-n/top*(H-50),bw-8,n/top*(H-50)));x.fillStyle='#fff';x.font='22px sans-serif';x.fillText(h[ci].trim()+' distribution',20,24)}

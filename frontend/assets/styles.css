@@ -69,15 +69,18 @@ footer h4{color:var(--ink);margin:0 0 8px}footer a{display:block;text-decoration
 @media(prefers-reduced-motion:reduce){.glow .vw{transition:none}}
 
 a.logo{color:var(--ink);text-decoration:none}
+body.inner{background:radial-gradient(900px 340px at 50% -80px,rgba(255,150,40,.16),transparent 70%),#000}
 body.inner header{position:sticky;transform:none}
 .skip{position:absolute;left:-999px;top:0;background:#fff;color:#000;padding:8px 14px;z-index:20}.skip:focus{left:8px;top:8px}
 .crumbs{max-width:1100px;margin:0 auto;padding:24px 5vw 0;font-size:14px}.crumbs ol{list-style:none;display:flex;gap:8px;margin:0;padding:0;color:var(--mute)}.crumbs li+li::before{content:"/";margin-right:8px}.crumbs a{color:var(--mute)}
 main>section h1{font-size:clamp(1.9rem,4vw,2.6rem);font-weight:400;margin:0 0 6px;line-height:1.15}
 .h3{font-size:1.05rem;font-weight:400;margin:0 0 8px}
-.card.link{display:block;color:inherit;text-decoration:none;transition:border-color .2s}.card.link:hover{border-color:var(--cy)}
+.card{transition:transform .25s,border-color .25s}.card:hover{border-color:#5a3418}
+@media(prefers-reduced-motion:no-preference){.card:hover{transform:translateY(-2px)}}
+.card.link{display:block;color:inherit;text-decoration:none}.card.link:hover{border-color:var(--cy)}
 .chart.tall{height:180px}.fc{text-align:center;margin-top:24px}.fh{color:var(--ink);margin:0 0 8px}.mono{font-family:'IBM Plex Mono',monospace;font-size:13px}
 .linkbtn{background:none;border:0;color:var(--mute);font:inherit;padding:0;cursor:pointer;text-align:left;margin:4px 0}.linkbtn:hover{color:var(--ink)}
 .nf{min-height:70vh;display:grid;place-content:center;text-align:center;padding:60px 5vw}.nf h1{font-size:clamp(2rem,6vw,3.4rem);font-weight:400;margin:0 0 8px}
-.feed .empty{color:var(--mute)}
+.feed .empty{color:var(--mute)}.tl{border-left:2px solid var(--line);margin:0 0 0 6px;padding:0 0 0 18px;list-style:none}.tl li{margin:0 0 18px;position:relative}.tl li::before{content:"";position:absolute;left:-25px;top:8px;width:10px;height:10px;border-radius:50%;background:var(--cy)}.tl b{font-weight:400;color:var(--ink)}.tl span{display:block;color:var(--mute);font-size:14px}
 dialog.pal{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:12px;width:min(92vw,420px);margin:12vh auto auto}dialog.pal::backdrop{background:#000a}
 dialog.pal input{margin-bottom:8px}dialog.pal ul{list-style:none;margin:0;padding:0}dialog.pal a{display:block;padding:8px 10px;color:var(--ink);text-decoration:none;border-radius:8px}dialog.pal a:hover,dialog.pal a:focus{background:var(--line)}

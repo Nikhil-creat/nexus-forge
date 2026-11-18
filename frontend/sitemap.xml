@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://yourdomain.com/</loc><lastmod>2026-11-18</lastmod></url>
-  <url><loc>https://yourdomain.com/workspace</loc><lastmod>2026-11-18</lastmod></url>
-  <url><loc>https://yourdomain.com/monitor</loc><lastmod>2026-11-18</lastmod></url>
-  <url><loc>https://yourdomain.com/architecture</loc><lastmod>2026-11-18</lastmod></url>
-  <url><loc>https://yourdomain.com/about</loc><lastmod>2026-11-18</lastmod></url>
-  <url><loc>https://yourdomain.com/faq</loc><lastmod>2026-11-18</lastmod></url>
+  <url><loc>https://nikhil-creat.github.io/nexus-forge/</loc><lastmod>2026-11-18</lastmod></url>
+  <url><loc>https://nikhil-creat.github.io/nexus-forge/workspace/</loc><lastmod>2026-11-18</lastmod></url>
+  <url><loc>https://nikhil-creat.github.io/nexus-forge/security/</loc><lastmod>2026-11-18</lastmod></url>
+  <url><loc>https://nikhil-creat.github.io/nexus-forge/projects/</loc><lastmod>2026-11-18</lastmod></url>
+  <url><loc>https://nikhil-creat.github.io/nexus-forge/architecture/</loc><lastmod>2026-11-18</lastmod></url>
+  <url><loc>https://nikhil-creat.github.io/nexus-forge/about/</loc><lastmod>2026-11-18</lastmod></url>
+  <url><loc>https://nikhil-creat.github.io/nexus-forge/faq/</loc><lastmod>2026-11-18</lastmod></url>
 </urlset>

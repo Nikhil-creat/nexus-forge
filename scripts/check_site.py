@@ -1,26 +1,36 @@
-"""Static checks for the frontend: SEO tags, one h1, valid JSON-LD, links, CSP-safe markup, no source maps."""
+"""Static checks for the frontend: SEO tags, one h1, valid JSON-LD, relative links, CSP-safe markup, no source maps."""
 import glob, json, os, re, sys
 
 R = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
-errs, titles, descs, ids_by_page = [], {}, {}, {}
-pages = sorted(glob.glob(R + "/*.html"))
-html = {os.path.basename(p): open(p, encoding="utf-8").read() for p in pages}
+errs, titles, descs = [], {}, {}
+pages = sorted(glob.glob(R + "/**/index.html", recursive=True)) + [R + "/404.html"]
+html = {os.path.relpath(p, R): open(p, encoding="utf-8").read() for p in pages}
+site = re.findall(r"<loc>(.*?)</loc>", open(R + "/sitemap.xml").read())[0].rstrip("/")
 
 
-def target(path):
-    path = path.split("#")[0].split("?")[0]
-    if path in ("", "/"):
-        return "index.html"
-    rel = path.lstrip("/")
-    for cand in (rel, rel + ".html"):
-        if os.path.isfile(os.path.join(R, cand)):
-            return cand
-    return None
+def fs(href, pagedir):
+    href = href.split("?")[0]
+    path, _, frag = href.partition("#")
+    if href.startswith(site):
+        full = os.path.join(R, path[len(site):].lstrip("/"))
+    elif re.match(r"(https?:|mailto:|tel:|data:)", href):
+        return None, ""
+    elif path == "":
+        return None, ""
+    else:
+        full = os.path.normpath(os.path.join(pagedir, path))
+    if path.endswith("/") or os.path.isdir(full):
+        full = os.path.join(full, "index.html")
+    return full, frag
+
+
+def ids_of(text):
+    return set(re.findall(r'\sid="([^"]+)"', text))
 
 
 for n, h in html.items():
+    pagedir = os.path.dirname(os.path.join(R, n))
     ids = re.findall(r'\sid="([^"]+)"', h)
-    ids_by_page[n] = set(ids)
     if len(ids) != len(set(ids)):
         errs.append(f"{n}: duplicate ids")
     if len(re.findall(r"<h1[ >]", h)) != 1:
@@ -31,12 +41,12 @@ for n, h in html.items():
         errs.append(f"{n}: title missing or longer than 65 characters")
     if len(d) != 1 or not 50 <= len(d[0]) <= 160:
         errs.append(f"{n}: meta description missing or outside 50-160 characters")
-    if t:
-        titles.setdefault(t[0], []).append(n)
-    if d:
-        descs.setdefault(d[0], []).append(n)
+    titles.setdefault(t[0] if t else n, []).append(n)
+    descs.setdefault(d[0] if d else n, []).append(n)
+    if 'http-equiv="Content-Security-Policy"' not in h or "data-base=" not in h:
+        errs.append(f"{n}: missing CSP meta or data-base")
     if n != "404.html":
-        for k in ('rel="canonical"', 'property="og:image"', 'name="twitter:card"', 'application/ld+json'):
+        for k in ('rel="canonical"', 'property="og:image"', 'name="twitter:card"', "application/ld+json"):
             if k not in h:
                 errs.append(f"{n}: missing {k}")
     elif "noindex" not in h:
@@ -53,19 +63,25 @@ for n, h in html.items():
     for img in re.findall(r"<img\b[^>]*>", h):
         if not re.search(r'\salt="[^"]+"', img):
             errs.append(f"{n}: image without alt text")
-    for a in re.findall(r'(?:href|src)="(/[^"]*)"', h):
-        if target(a) is None:
+    for c in re.findall(r"<canvas\b[^>]*>", h):
+        if 'aria-label="' not in c:
+            errs.append(f"{n}: canvas without aria-label")
+    if re.search(r'(?:href|src)="/(?!/)', h):
+        errs.append(f"{n}: root-relative link breaks GitHub Pages project sites")
+    for a in re.findall(r'(?:href|src)="([^"]+)"', h):
+        full, frag = fs(a, pagedir)
+        if full is None:
+            continue
+        if not os.path.isfile(full):
             errs.append(f"{n}: broken link {a}")
-    for p, frag in re.findall(r'href="(/[^"#]*)#([^"]+)"', h):
-        tg = target(p)
-        if tg and frag not in ids_by_page.get(tg, set(re.findall(r'\sid="([^"]+)"', html.get(tg, "")))):
-            errs.append(f"{n}: missing anchor #{frag} on {p}")
-    # every JS action must exist, and every $('id') must exist on the page
-    js = ""
-    for s in re.findall(r'src="/assets/(\w+)\.js"', h):
-        js += open(f"{R}/assets/{s}.js", encoding="utf-8").read()
+        elif frag and frag not in ids_of(open(full, encoding="utf-8").read()):
+            errs.append(f"{n}: missing anchor #{frag} in {a}")
+    js, loaded = "", []
+    for s in re.findall(r'src="[^"]*assets/(\w+)\.js"', h):
+        body = open(f"{R}/assets/{s}.js", encoding="utf-8").read()
+        js += body
         if s not in ("core", "config"):
-            for i in set(re.findall(r"\$\('(\w+)'\)", open(f"{R}/assets/{s}.js", encoding="utf-8").read())):
+            for i in set(re.findall(r"\$\('(\w+)'\)", body)):
                 if i not in ids:
                     errs.append(f"{n}: {s}.js uses missing id #{i}")
     fns = set(re.findall(r"function\s+(\w+)", js))
@@ -76,14 +92,16 @@ for n, h in html.items():
 for k, v in list(titles.items()) + list(descs.items()):
     if len(v) > 1:
         errs.append(f"duplicate title/description on {v}")
-site = re.findall(r"<loc>(.*?)</loc>", open(R + "/sitemap.xml").read())
 want = {n for n in html if n != "404.html"}
-got = {"index.html" if u.rstrip("/").count("/") <= 2 else u.rsplit("/", 1)[1] + ".html" for u in site}
+got = set()
+for u in re.findall(r"<loc>(.*?)</loc>", open(R + "/sitemap.xml").read()):
+    p = u[len(site):].strip("/")
+    got.add((p + "/index.html") if p else "index.html")
 if want != got:
     errs.append(f"sitemap mismatch: {sorted(want ^ got)}")
 if glob.glob(R + "/**/*.map", recursive=True):
     errs.append("source map files must not be shipped")
-for f in ("robots.txt", "llms.txt", "favicon.ico", "favicon.svg", "og-image.png", "apple-touch-icon.png", "manifest.webmanifest", ".well-known/security.txt"):
+for f in ("robots.txt", "llms.txt", "favicon.ico", "favicon.svg", "og-image.png", "apple-touch-icon.png", "manifest.webmanifest", ".well-known/security.txt", ".nojekyll", "sw.js"):
     if not os.path.isfile(os.path.join(R, f)):
         errs.append(f"missing {f}")
 print("\n".join(errs) if errs else f"OK: {len(html)} pages checked")

@@ -1,0 +1,60 @@
+<!DOCTYPE html><html lang="en" data-base="../"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://d2ol7oe51mr4n9.cloudfront.net; media-src https://d2ol7oe51mr4n9.cloudfront.net; connect-src 'self' https: http://localhost:8000; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<title>Workspace: analytics, ML and AI tools | Nexus Forge</title><meta name="description" content="Analyze CSV data, fit regression, cluster, classify, detect anomalies and ask questions about your documents, all in your browser."><link rel="canonical" href="https://nikhil-creat.github.io/nexus-forge/workspace/"><meta name="robots" content="index,follow,max-image-preview:large"><meta name="author" content="Nikhil Chary Sriramoju"><meta name="theme-color" content="#000000"><meta name="color-scheme" content="dark">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml"><link rel="icon" href="../favicon.ico" sizes="48x48"><link rel="apple-touch-icon" href="../apple-touch-icon.png"><link rel="manifest" href="../manifest.webmanifest">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Nexus Forge"><meta property="og:locale" content="en_IN"><meta property="og:title" content="Workspace: analytics, ML and AI tools | Nexus Forge"><meta property="og:description" content="Analyze CSV data, fit regression, cluster, classify, detect anomalies and ask questions about your documents, all in your browser."><meta property="og:url" content="https://nikhil-creat.github.io/nexus-forge/workspace/"><meta property="og:image" content="https://nikhil-creat.github.io/nexus-forge/og-image.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="Nexus Forge: a molten orange ring rising on a black background above the words Nexus Forge">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Workspace: analytics, ML and AI tools | Nexus Forge"><meta name="twitter:description" content="Analyze CSV data, fit regression, cluster, classify, detect anomalies and ask questions about your documents, all in your browser."><meta name="twitter:image" content="https://nikhil-creat.github.io/nexus-forge/og-image.png"><meta name="twitter:image:alt" content="Nexus Forge: a molten orange ring rising on a black background above the words Nexus Forge">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anta&family=IBM+Plex+Mono&display=swap"><link rel="stylesheet" href="../assets/styles.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://nikhil-creat.github.io/nexus-forge/"}, {"@type": "ListItem", "position": 2, "name": "Workspace", "item": "https://nikhil-creat.github.io/nexus-forge/workspace/"}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "Nexus Forge Workspace", "url": "https://nikhil-creat.github.io/nexus-forge/workspace/", "applicationCategory": "BusinessApplication", "operatingSystem": "Any (web browser)", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "INR"}, "author": {"@id": "https://nikhil-creat.github.io/nexus-forge/#person"}}</script></head><body class="inner"><a class="skip" href="#main">Skip to content</a><header><a class="logo" href="../">NEXUS<b>FORGE</b></a><button class="menu" type="button" aria-label="Toggle menu" aria-expanded="false" data-act="toggleNav">Menu</button><nav aria-label="Primary"><a href="../workspace/" aria-current="page">Workspace</a><a href="../security/">Security</a><a href="../projects/">Projects</a><a href="../architecture/">Architecture</a><a href="../about/">About</a><a href="../faq/">FAQ</a></nav></header><main id="main"><nav class="crumbs" aria-label="Breadcrumb"><ol><li><a href="../">Home</a></li><li aria-current="page">Workspace</li></ol></nav><noscript><p class="crumbs">This page needs JavaScript for its interactive tools.</p></noscript><section id="workbench"><h1>Workspace</h1><p class="sub">Example data is pre-filled, so replace it with your own. Everything runs in your browser; a backend is optional.</p>
+<div class="grid">
+<div class="card"><h2 class="h3">Data analytics</h2><label for="csvf">Upload a CSV file</label><input id="csvf" type="file" accept=".csv,text/csv" data-chg="loadCsv"><label for="csv">or paste CSV (header row first)</label>
+<textarea id="csv">age,salary,city
+23,30000,Warangal
+31,52000,Hyderabad
+28,45000,Hyderabad
+45,90000,Chennai
+52,400000,Chennai</textarea><p><button class="btn" data-act="runAnalytics">Analyze data</button></p><canvas id="hist" class="chart" role="img" aria-label="Histogram of the first numeric column"></canvas><pre class="out" id="o1">Results appear here.</pre></div>
+
+<div class="card"><h2 class="h3">Machine learning</h2><label for="xs">x values</label><input id="xs" value="1,2,3,4,5"><label for="ys">y values</label><input id="ys" value="2.1,4.2,5.9,8.1,10.2"><label for="px">Predict y for x =</label><input id="px" value="8">
+<p><button class="btn" data-act="runML">Fit and predict</button></p><pre class="out" id="o2">Results appear here.</pre></div>
+
+<div class="card"><h2 class="h3">Cybersecurity scan</h2><label for="logs">Paste logs or a request</label>
+<textarea id="logs">GET /item?id=1 OR 1=1
+Failed login from 10.0.0.5
+Failed login from 10.0.0.5
+Invalid password from 10.0.0.5</textarea><p><button class="btn" data-act="runScan">Scan</button></p><pre class="out" id="o3">Results appear here.</pre></div>
+
+<div class="card"><h2 class="h3">AI assistant</h2><label for="gkey">Groq API key (optional, kept in this tab only)</label><input id="gkey" type="password" autocomplete="off" data-chg="saveKey"><div id="chatlog" aria-live="polite"></div><label for="msg">Ask a question</label><input id="msg" placeholder="Explain what an outlier is">
+<p><button class="btn" data-act="ask">Send</button></p></div>
+</div></section><section id="lab"><h2>Lab</h2><p class="sub">Anomaly detection, document Q&amp;A, password audit and a protected history.</p>
+<div class="grid">
+<div class="card"><h3>Anomaly detection</h3><label for="series">Numbers, comma separated</label><input id="series" value="10,11,10,12,11,10,95,11,12,10"><canvas id="chart" class="chart" role="img" aria-label="Line chart of the series with anomalies marked"></canvas>
+<p><button class="btn" data-act="runAnom">Find anomalies</button></p><pre class="out" id="o4">Results appear here.</pre></div>
+<div class="card"><h3>Document Q&amp;A (RAG)</h3><label for="doc">Paste a document</label><textarea id="doc">Nexus Forge uses FastAPI for the backend and plain JavaScript for the frontend.
+
+Login tokens are signed with HMAC and expire after one hour.</textarea>
+<p><button class="btn alt" data-act="addDoc">Index document</button></p><label for="q">Question</label><input id="q" value="What does the backend use?"><p><button class="btn" data-act="askDoc">Ask</button></p><pre class="out" id="o5">Index a document, then ask.</pre></div>
+<div class="card"><h3>Password audit</h3><label for="pw">Type a password to test</label><input id="pw" type="password" autocomplete="off" data-inp="auditPw"><div class="bar"><i id="pwbar"></i></div><pre class="out" id="o7">Checked in your browser. Nothing is sent anywhere.</pre></div>
+<div class="card"><h3>Sign in and history</h3><label for="u">Username</label><input id="u" placeholder="username" autocomplete="username"><label for="p">Password</label><input id="p" type="password" autocomplete="current-password">
+<p><button class="btn" data-act="doLogin">Sign in</button> <button class="btn alt" data-act="signup">Create account</button> <button class="btn alt" data-act="loadHistory">Load history</button></p><pre class="out" id="o6">Sign in to see your last 20 actions.</pre></div>
+</div></section><section id="intelligence"><h2>Intelligence</h2><p class="sub">Clustering and classification run on the server, and in your browser when the API is offline.</p>
+<div class="grid">
+<div class="card"><h3>Clustering (k-means)</h3><label for="pts">Points, one "x,y" per line</label><textarea id="pts">1,1
+1.2,0.8
+0.9,1.1
+5,5
+5.2,4.8
+4.9,5.3
+9,1
+9.2,1.2
+8.8,0.9</textarea><label for="kk">Clusters (k)</label><input id="kk" type="number" min="2" max="8" value="3"><canvas id="sc" class="chart tall" role="img" aria-label="Scatter plot of the clusters"></canvas><p><button class="btn" data-act="runCluster">Cluster</button></p><pre class="out" id="o8">Results appear here.</pre></div>
+<div class="card"><h3>Classifier (nearest neighbours)</h3><label for="tr">Training data, "x,y,label" per line</label><textarea id="tr">1,1,safe
+1.2,0.8,safe
+0.9,1.1,safe
+5,5,risky
+5.2,4.8,risky
+4.9,5.3,risky</textarea><label for="qq">Classify point "x,y"</label><input id="qq" value="4.6,4.4"><p><button class="btn" data-act="runKnn">Classify</button></p><pre class="out" id="o9">Results appear here.</pre></div>
+<div class="card"><h3>Report and install</h3><p>Download everything you ran in this session as one HTML file.</p><p><button class="btn" data-act="exportReport">Download report</button></p><p>Use "Add to Home screen" in your browser to install Nexus Forge as an app.</p></div>
+</div></section></main><footer><div class="fgrid"><div><p class="fh">Nexus Forge</p><p>Data analytics, machine learning, AI and security in one open source platform.</p><p>Thorrur, Telangana, India</p><p class="mono" id="apiState">Mode: checking</p></div>
+<div><p class="fh">Pages</p><a href="../workspace/">Workspace</a><a href="../security/">Security lab</a><a href="../projects/">Projects</a><a href="../architecture/">Architecture</a><a href="../about/">Credentials</a><a href="../faq/">FAQ</a></div>
+<div><p class="fh">Elsewhere</p><a rel="noopener" href="https://github.com/Nikhil-creat">GitHub</a><a rel="noopener" href="https://in.linkedin.com/in/nikhil-chary-sriramoju-95041b38a">LinkedIn</a><a href="mailto:sriramojunikhil66@gmail.com">Email</a><button type="button" class="linkbtn" data-act="openPalette">Quick search (Ctrl+K)</button></div></div>
+<p class="fc">© 2026 Nikhil Chary Sriramoju</p></footer><script src="../assets/config.js" defer></script><script src="../assets/core.js" defer></script><script src="../assets/workspace.js" defer></script></body></html>

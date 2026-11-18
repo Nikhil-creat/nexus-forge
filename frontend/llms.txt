@@ -1,15 +1,16 @@
 # Nexus Forge
 
-> Open source workspace that combines data analytics, machine learning, AI document Q&A and cybersecurity log analysis. Built by Nikhil Chary Sriramoju, a final-year B.Tech Computer Science student in Telangana, India.
+> Open source workspace that combines data analytics, machine learning, AI document Q&A and cybersecurity tools. Built by Nikhil Chary Sriramoju, a final-year B.Tech Computer Science student in Telangana, India.
 
-Nexus Forge runs as static pages with an optional FastAPI backend. Every analysis tool also works in the browser when the API is offline.
+Nexus Forge is a static site. Every tool runs in the browser; a FastAPI backend is optional.
 
 ## Pages
-- [Workspace](https://yourdomain.com/workspace): CSV analytics, regression, clustering, classification, anomaly detection and document Q&A
-- [Threat monitor](https://yourdomain.com/monitor): log analysis for injection attempts and brute-force logins
-- [Architecture](https://yourdomain.com/architecture): technology stack and how the parts connect
-- [Credentials](https://yourdomain.com/about): education, internships and certifications of the builder
-- [FAQ](https://yourdomain.com/faq): common questions about hosting and configuration
+- [Workspace](https://nikhil-creat.github.io/nexus-forge/workspace/): CSV analytics, regression, clustering, classification, anomaly detection and document Q&A
+- [Security lab](https://nikhil-creat.github.io/nexus-forge/security/): AES-256-GCM encrypted notes, SHA-256 file fingerprints and log analysis
+- [Projects](https://nikhil-creat.github.io/nexus-forge/projects/): selected machine learning and data engineering projects
+- [Architecture](https://nikhil-creat.github.io/nexus-forge/architecture/): technology stack and how the parts connect
+- [Credentials](https://nikhil-creat.github.io/nexus-forge/about/): education, internships and certifications
+- [FAQ](https://nikhil-creat.github.io/nexus-forge/faq/): hosting and configuration questions
 
 ## Source
 - [GitHub repository](https://github.com/Nikhil-creat/nexus-forge): code, tests and deployment files
