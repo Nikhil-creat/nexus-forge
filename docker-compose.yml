@@ -1,0 +1,12 @@
+services:
+  api:
+    build: ./backend
+    ports: ["8000:8000"]
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+  web:
+    image: nginx:alpine
+    ports: ["8080:80"]
+    volumes: ["./frontend:/usr/share/nginx/html:ro"]
