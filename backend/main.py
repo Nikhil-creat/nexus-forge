@@ -3,6 +3,8 @@ from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+import aiclient
+
 app = FastAPI(title="Nexus Forge API", version="1.0")
 app.add_middleware(CORSMiddleware, allow_origins=os.getenv("ORIGINS", "*").split(","), allow_methods=["*"], allow_headers=["*"])
 SECRET = (os.getenv("SECRET_KEY") or os.urandom(32).hex()).encode()
@@ -137,20 +139,13 @@ def scan(b: Scan):
 
 @app.post("/api/chat")
 def chat(b: Chat):
-    key = os.getenv("GROQ_API_KEY")
-    if not key:
-        return {"reply": "AI engine is in offline mode. Set GROQ_API_KEY on the server to enable live answers.", "mode": "offline"}
-    req = urllib.request.Request(
-        "https://api.groq.com/openai/v1/chat/completions", method="POST",
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        data=json.dumps({"model": "llama-3.3-70b-versatile", "messages": [
-            {"role": "system", "content": "You are Nexus, an assistant for data analytics, ML and cybersecurity. Be concise."},
-            {"role": "user", "content": b.message[:2000]}]}).encode())
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return {"reply": json.load(r)["choices"][0]["message"]["content"], "mode": "live"}
-    except Exception:
-        raise HTTPException(502, "AI provider unreachable")
+        reply = aiclient.complete("You are Nexus, an assistant for data analytics, ML and cybersecurity. Be concise.", b.message[:2000])
+    except aiclient.AIError as e:
+        raise HTTPException(502, str(e))
+    if reply is None:
+        return {"reply": "No AI key is configured on the server. Set GROQ_API_KEY, GEMINI_API_KEY or another provider key.", "mode": "offline"}
+    return {"reply": reply, "mode": "live"}
 
 
 # ---------------- Phase 2 ----------------
@@ -190,18 +185,9 @@ async def limiter(request, call_next):
 
 
 def llm(system, user):
-    key = os.getenv("GROQ_API_KEY")
-    if not key:
-        return None
-    req = urllib.request.Request(
-        "https://api.groq.com/openai/v1/chat/completions", method="POST",
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        data=json.dumps({"model": "llama-3.3-70b-versatile",
-                         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user[:6000]}]}).encode())
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return json.load(r)["choices"][0]["message"]["content"]
-    except Exception:
+        return aiclient.complete(system, user)
+    except aiclient.AIError:
         return None
 
 

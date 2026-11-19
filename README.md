@@ -17,9 +17,12 @@ Also: `sitemap.xml`, `robots.txt`, `llms.txt`, `.well-known/security.txt`, web m
 3. Optional custom domain: add it under Settings, Pages, create `frontend/CNAME` with the domain, then run
    `sh scripts/set-domain.sh https://yourdomain.com` and push.
 
+## Workspace
+Tabbed console (Data, Models, Assistant, Security, Session). The assistant detects Groq, Gemini, Anthropic, OpenRouter and OpenAI keys, streams answers, retries on rate limits, falls back to smaller models and answers common questions offline.
+
 ## Optional backend
 Deploy `backend/` to Render using `render.yaml`, then set your API origin in `frontend/assets/config.js`.
-Env vars: `SECRET_KEY`, `ADMIN_PASSWORD` (admin is disabled without it), `GROQ_API_KEY` (optional), `ORIGINS`, `RATE_LIMIT`. See `.env.example`.
+Env vars: `SECRET_KEY`, `ADMIN_PASSWORD` (admin is disabled without it), one AI key (optional: `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`; the server retries and falls back across models), `ORIGINS`, `RATE_LIMIT`. See `.env.example`.
 
 ## Run locally
     npx serve frontend
