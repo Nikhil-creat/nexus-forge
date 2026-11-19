@@ -12,7 +12,7 @@ class AIError(Exception):
 
 PROVIDERS = [("GROQ_API_KEY", "groq"), ("GEMINI_API_KEY", "gemini"), ("OPENROUTER_API_KEY", "openrouter"),
              ("OPENAI_API_KEY", "openai"), ("ANTHROPIC_API_KEY", "anthropic")]
-CHAINS = {"groq": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"], "gemini": ["gemini-flash-latest", "gemini-flash-lite-latest"],
+CHAINS = {"groq": ["openai/gpt-oss-120b", "openai/gpt-oss-20b"], "gemini": ["gemini-flash-latest", "gemini-flash-lite-latest"],
           "openrouter": ["openrouter/auto"], "openai": ["gpt-4o-mini"], "anthropic": ["claude-haiku-5-5"]}
 URLS = {"groq": "https://api.groq.com/openai/v1/chat/completions", "openrouter": "https://openrouter.ai/api/v1/chat/completions",
         "openai": "https://api.openai.com/v1/chat/completions", "anthropic": "https://api.anthropic.com/v1/messages"}
@@ -39,8 +39,9 @@ def _request(name, key, model, system, user):
     else:
         url = URLS[name]
         headers = {"Authorization": f"Bearer {key}"}
-        limit = {"max_completion_tokens": 700} if name == "openai" else {"max_tokens": 700}
-        body = {"model": model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], **limit}
+        limit = {"max_completion_tokens": 1500} if name == "openai" else {"max_tokens": 1500 if name == "groq" else 900}
+        extra = {"reasoning_effort": "low"} if name == "groq" and "gpt-oss" in model else {}
+        body = {"model": model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], **limit, **extra}
     req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json", **headers}, method="POST")
     with urllib.request.urlopen(req, timeout=25) as r:
         d = json.load(r)

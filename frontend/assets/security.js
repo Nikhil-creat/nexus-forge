@@ -5,7 +5,7 @@ for(const ip in f)ev.push(f[ip]>=3?{level:'high',label:'Brute-force burst',ip,ts
 function summarize(ev){const c={high:0,medium:0,low:0};ev.forEach(e=>c[e.level]++);return{total:ev.length,high:c.high,medium:c.medium,low:c.low,recent:ev.slice(-8).reverse()}}
 function render(r){$('cTotal').textContent=r.total;$('cHigh').textContent=r.high;$('cMed').textContent=r.medium;$('cLow').textContent=r.low;
 $('feed').innerHTML=r.recent.length?r.recent.map(e=>'<li class="risk-'+e.level+'">'+new Date(e.ts*1000).toLocaleTimeString()+'  '+esc(e.label)+(e.ip?'  ('+esc(e.ip)+')':'')+'</li>').join(''):'<li class="empty">No events yet.</li>'}
-async function poll(){if(!API)return;try{const r=await fetch(API+'/api/logs/summary');if(!r.ok)throw 0;render(await r.json());bad=0}catch(e){if(++bad>2)clearInterval(timer)}}
+async function poll(){const h=await HEALTH;if(!API||!h||!(h.caps||[]).includes('logs'))return;try{const r=await fetch(API+'/api/logs/summary');if(!r.ok)throw 0;render(await r.json());bad=0}catch(e){if(++bad>2)clearInterval(timer)}}
 async function ingest(){const lines=$('mlogs').value.split('\n').filter(x=>x.trim()).slice(0,500);if(!lines.length){$('mout').textContent='Paste some log lines first.';return}
 try{const r=await call('/api/logs/ingest',{lines});$('mout').textContent='Analyzed '+lines.length+' lines and recorded '+r.events+' events on the server.';await poll()}
 catch(e){LOCAL=LOCAL.concat(analyzeLocal(lines));render(summarize(LOCAL));$('mout').textContent='Analyzed '+lines.length+' lines in your browser. Nothing is stored or sent.'}}

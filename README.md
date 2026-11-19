@@ -1,39 +1,34 @@
 # Nexus Forge
 
 Data analytics, machine learning, AI document Q&A and security tools in one open source project.
-A static site that runs entirely in the browser and works on GitHub Pages, plus an optional FastAPI backend.
-
-## Live site
-https://nikhil-creat.github.io/nexus-forge/
+Static pages plus Vercel Functions. Every tool also works in the browser with no server at all.
 
 ## Pages
-`/` home, `workspace/` (analytics, regression, clustering, classification, anomaly detection, document Q&A, AI assistant),
-`security/` (AES-256-GCM notes, SHA-256 file fingerprints, log analysis), `projects/`, `architecture/`, `about/` credentials, `faq/`, custom `404.html`.
-Also: `sitemap.xml`, `robots.txt`, `llms.txt`, `.well-known/security.txt`, web manifest, favicons and a 1200x630 share image.
+`/` home, `/workspace/` (tabbed console: Data, Models, Assistant, Security, Session), `/security/` (AES-256-GCM notes, SHA-256 fingerprints, log analysis),
+`/projects/`, `/architecture/`, `/about/` credentials, `/faq/`, custom `404.html`. Also `sitemap.xml`, `robots.txt`, `llms.txt`, `.well-known/security.txt`, web manifest.
 
-## Deploy to GitHub Pages
-1. Repository Settings, Pages, Build and deployment, Source: **GitHub Actions**.
-2. Push to `main`. The workflow `.github/workflows/pages.yml` checks the site and publishes the `frontend` folder.
-3. Optional custom domain: add it under Settings, Pages, create `frontend/CNAME` with the domain, then run
-   `sh scripts/set-domain.sh https://yourdomain.com` and push.
+## How the AI works
+1. **Server key (recommended):** set one provider key in Vercel. `/api/chat` discovers the provider's live models, retries rate limits, falls back to smaller models and streams answers. The key never reaches the browser.
+2. **Browser key:** paste a Groq, Gemini, Anthropic, OpenRouter or OpenAI key in the Assistant tab (kept in the tab only). It is auto-detected and live models are listed.
+3. **No key:** built-in answers for common data, ML and security questions.
+`/api/health` advertises capabilities, so the site never calls an endpoint that does not exist.
 
-## Workspace
-Tabbed console (Data, Models, Assistant, Security, Session). The assistant detects Groq, Gemini, Anthropic, OpenRouter and OpenAI keys, streams answers, retries on rate limits, falls back to smaller models and answers common questions offline.
+## Deploy on Vercel
+1. Import the GitHub repository. Root Directory: `frontend`. Framework Preset: Other. No build command.
+2. Settings, Environment Variables: add one AI key (see `.env.example`), then redeploy.
+3. Run `sh scripts/set-domain.sh https://your-site.vercel.app` once (canonical URLs, sitemap, social tags), commit and push.
+4. Optional custom domain: Settings, Domains, then run the same script with the new URL.
 
-## Optional backend
-Deploy `backend/` to Render using `render.yaml`, then set your API origin in `frontend/assets/config.js`.
-Env vars: `SECRET_KEY`, `ADMIN_PASSWORD` (admin is disabled without it), one AI key (optional: `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`; the server retries and falls back across models), `ORIGINS`, `RATE_LIMIT`. See `.env.example`.
-
-## Run locally
-    npx serve frontend
-    cd backend && pip install -r requirements.txt && ADMIN_PASSWORD=choose-one uvicorn main:app --reload
-    # connect the site to the API: localStorage.setItem('api','http://localhost:8000')
-Or `docker compose up --build` (site on :8080, API docs on :8000/docs).
+## Develop locally
+    node scripts/dev.js            # http://localhost:3000, behaves like Vercel (clean URLs, /api, headers)
+    GROQ_API_KEY=... node scripts/dev.js
 
 ## Quality gates (CI)
-`python scripts/check_site.py` verifies one h1, unique titles and descriptions, canonicals, valid JSON-LD, alt text,
-relative links and anchors (project-site safe), sitemap coverage, strict-CSP-safe markup and that no source maps ship.
-`pytest` covers the API and the Docker image is built on every push.
+`python scripts/check_site.py` (one h1, unique titles and descriptions, canonicals, JSON-LD, alt text, links and anchors, sitemap, strict-CSP-safe markup, no source maps),
+`node scripts/test-api.js` (functions), `node scripts/test-browser.js` (browser logic), `pytest` (optional Python backend), Docker build.
+
+## Optional Python backend
+`backend/` (FastAPI, SQLite) can run on Render (`render.yaml`) for stored history and signup. Point `frontend/assets/config.js` at it; it advertises its capabilities the same way.
 
 ## Security
-See `SECURITY.md`. GitHub Pages cannot send HTTP headers, so a strict Content-Security-Policy is set with a meta tag.
+Strict Content-Security-Policy, HSTS, frame denial and more are set in `frontend/vercel.json`. See `SECURITY.md`.

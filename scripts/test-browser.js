@@ -1,0 +1,51 @@
+'use strict';
+// Runs the site's own scripts in a Node VM with a fake DOM and fake provider APIs. Run: node scripts/test-browser.js
+const vm = require('vm'), fs = require('fs'), path = require('path'), assert = require('assert');
+const A = path.join(__dirname, '..', 'frontend', 'assets');
+const mk = () => ({ value: '', textContent: '', innerHTML: '', hidden: false, tabIndex: 0, attrs: {}, classList: { toggle() { return false; }, add() {}, remove() {} }, addEventListener() {}, setAttribute(k, v) { this.attrs[k] = v; }, insertAdjacentHTML(_, h) { this.innerHTML += h; }, dataset: {} });
+const els = {}, $ = id => els[id] || (els[id] = mk());
+let key = '', calls = [], script = [], list = null, hash = '', store = {};
+const enc = new TextEncoder();
+const sse = ls => new ReadableStream({ start(c) { for (const l of ls) c.enqueue(enc.encode(l)); c.close(); } });
+const GROQ = { data: [{ id: 'llama-3.3-70b-versatile' }, { id: 'whisper-large-v3' }, { id: 'openai/gpt-oss-20b' }, { id: 'openai/gpt-oss-120b' }, { id: 'meta-llama/llama-guard-4-12b' }] };
+const ctx = {
+  document: { getElementById: $, querySelector: () => $('q'), querySelectorAll: () => [], createElement: () => mk(), addEventListener() {}, activeElement: null, documentElement: { dataset: { base: './' } }, body: { classList: { contains: () => false } } },
+  history: { replaceState(_, __, h) { hash = h; } }, localStorage: { getItem: k => store[k] || null, setItem(k, v) { store[k] = v; }, removeItem(k) { delete store[k]; } }, sessionStorage: { getItem: () => key, setItem(_, v) { key = v; } },
+  location: { port: '', protocol: 'https:', origin: 'https://x', get hash() { return hash; }, reload() { ctx.reloaded = true; } }, addEventListener() {}, setInterval() {}, setTimeout: f => { f(); return 0; }, matchMedia: () => ({ matches: true }), navigator: {},
+  console, Math, JSON, Date, Promise, Object, Array, String, Number, isNaN, Set, Map, Error, Symbol, TextDecoder, TextEncoder, ReadableStream, Uint8Array,
+  fetch: async (url, o) => {
+    if (String(url).endsWith('/models') || String(url).includes('/v1beta/models?')) { calls.push({ url, list: true }); if (list === 'fail') throw new TypeError('net'); if (list === 401) return { ok: false, status: 401, headers: { get: () => null }, json: async () => ({}) }; return { ok: true, status: 200, json: async () => list || GROQ }; }
+    const body = JSON.parse(o.body); calls.push({ url, body }); const st = script.shift() || 200;
+    if (st === 'stream') return { ok: true, status: 200, headers: { get: () => null }, body: sse(['data: {"choices":[{"delta":{"content":"Hel"}}]}\n\n', 'data: {"choices":[{"delta":{"content":"lo"}}]}\n\ndata: [DONE]\n\n']) };
+    if (st === 'empty') return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ choices: [{ message: { content: '' } }] }) };
+    if (st !== 200) return { ok: false, status: st, headers: { get: () => null }, json: async () => ({ error: { message: 'quota exceeded' } }) };
+    return { ok: true, status: 200, headers: { get: () => null }, json: async () => url.includes('generativelanguage') ? { candidates: [{ content: { parts: [{ text: 'G' }] } }] } : url.includes('anthropic') ? { content: [{ text: 'A' }] } : { choices: [{ message: { content: 'O' } }] } };
+  }
+};
+ctx.window = ctx; vm.createContext(ctx);
+for (const f of ['config', 'core', 'workspace']) vm.runInContext(fs.readFileSync(path.join(A, f + '.js'), 'utf8'), ctx, { filename: f });
+let n = 0, failed = 0;
+async function t(name, fn) { try { await fn(); n++; console.log('pass', name); } catch (e) { failed++; console.log('FAIL', name, '\n  ', e.message); } }
+const E = c => vm.runInContext(c, ctx), L = (u, h) => E(`llm('s',${JSON.stringify(u)},${JSON.stringify(h || [])})`);
+const fresh = () => { calls = []; script = []; list = null; els.gmodel = { value: '' }; E('CACHE.clear();for(const k in MODELS)delete MODELS[k]'); };
+(async () => {
+  await t('provider detection', () => { const P = k => E(`provider(${JSON.stringify(k)})`); assert.ok(P('gsk_a') === 'Groq' && P('AIzaX') === 'Gemini' && P('sk-ant-a') === 'Anthropic' && P('sk-or-v1') === 'OpenRouter' && P('sk-proj') === 'OpenAI' && P('x') === ''); });
+  await t('discovery picks gpt-oss-120b, lists chat models only, fills the datalist', async () => { fresh(); key = 'gsk_' + 'a'.repeat(40); await L('d1'); assert.strictEqual(calls.find(c => c.body).body.model, 'openai/gpt-oss-120b'); const opts = els.mlist.innerHTML; assert.ok(opts.includes('gpt-oss-120b') && !opts.includes('whisper') && !opts.includes('guard')); });
+  await t('only live models are requested (retired llama never used)', async () => { fresh(); key = 'gsk_b' + 'a'.repeat(40); list = { data: [{ id: 'openai/gpt-oss-20b' }, { id: 'llama-3.3-70b-versatile' }] }; await L('d2'); assert.strictEqual(calls.find(c => c.body).body.model, 'openai/gpt-oss-20b'); });
+  await t('discovery 401 reports the key and sends no chat request', async () => { fresh(); key = 'gsk_c' + 'a'.repeat(40); list = 401; await assert.rejects(L('d3'), /key was rejected/); assert.ok(!calls.some(c => c.body)); });
+  await t('discovery network failure falls back to the built-in chain', async () => { fresh(); key = 'gsk_d' + 'a'.repeat(40); list = 'fail'; await L('d4'); assert.strictEqual(calls.find(c => c.body).body.model, 'openai/gpt-oss-120b'); });
+  await t('model box: provider names, key names and unknown models are ignored', async () => { for (const v of ['Groq', 'GROQ_API_KEY', 'not-a-model', 'two words']) { fresh(); key = 'gsk_e' + 'a'.repeat(40); els.gmodel = { value: v }; await L('d5' + v); assert.strictEqual(calls.find(c => c.body).body.model, 'openai/gpt-oss-120b', v); } });
+  await t('model box: an available model is honoured first', async () => { fresh(); key = 'gsk_f' + 'a'.repeat(40); els.gmodel = { value: 'openai/gpt-oss-20b' }; await L('d6'); assert.strictEqual(calls.find(c => c.body).body.model, 'openai/gpt-oss-20b'); });
+  await t('429 retries, then falls back to the next model', async () => { fresh(); key = 'gsk_g' + 'a'.repeat(40); script = [429, 429]; const r = await L('d7'); assert.strictEqual(r, 'O'); const m = calls.filter(c => c.body).map(c => c.body.model); assert.deepStrictEqual(m, ['openai/gpt-oss-120b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b']); });
+  await t('all-429 explains the limit with the provider message', async () => { fresh(); key = 'gsk_h' + 'a'.repeat(40); script = [429, 429, 429, 429, 429, 429]; await assert.rejects(L('d8'), e => /rate or quota limit/.test(e.message) && /quota exceeded/.test(e.message)); });
+  await t('401 stops at once; empty reply moves to the next model; cache avoids a second call', async () => { fresh(); key = 'gsk_i' + 'a'.repeat(40); script = [401]; await assert.rejects(L('d9'), /key was rejected/); fresh(); script = ['empty']; assert.strictEqual(await L('d10'), 'O'); const c0 = calls.length; await L('d10'); assert.strictEqual(calls.length, c0); });
+  await t('history is sent; streaming delivers progressive tokens', async () => { fresh(); key = 'gsk_j' + 'a'.repeat(40); await L('d11', [{ role: 'user', content: 'earlier' }, { role: 'assistant', content: 'reply' }]); assert.strictEqual(calls.find(c => c.body).body.messages[1].content, 'earlier'); fresh(); script = ['stream']; const seen = []; ctx.seen = seen; const r = await E("llm('s','d12',[],x=>seen.push(x))"); assert.ok(r === 'Hello' && seen.join('|') === 'Hel|Hello'); });
+  await t('Gemini discovery uses generateContent models', async () => { fresh(); key = 'AIza' + 'a'.repeat(35); list = { models: [{ name: 'models/gemini-flash-latest', supportedGenerationMethods: ['generateContent'] }, { name: 'models/embedding-001', supportedGenerationMethods: ['embedContent'] }] }; assert.strictEqual(await L('d13'), 'G'); assert.ok(calls.find(c => c.body).url.includes('gemini-flash-latest')); });
+  await t('offline knowledge answers', () => { assert.ok(/interquartile/.test(E("kbAnswer('what is an outlier?')")) && E("kbAnswer('zzz')") === ''); });
+  await t('tabs: switching, fallback and hash', () => { E("showTab('models')"); assert.ok(els.models.hidden === false && els.data.hidden === true && els['tab-models'].attrs['aria-selected'] === 'true'); E("showTab('x')"); assert.strictEqual(els.data.hidden, false); E("tab({dataset:{tab:'security'}})"); assert.ok(hash === '#security' && els.security.hidden === false); });
+  await t('stats table renders and escapes values', () => { const h = E("statsTable({rows:3,columns:{age:{type:'number',mean:30,min:20,max:40,std:8,outliers:0,missing:0},city:{type:'text',unique:2,top:[['<b>X',2]],missing:1}}})"); assert.ok(/3 rows, 2 columns/.test(h) && /&lt;b&gt;X/.test(h) && /missing 1/.test(h)); });
+  await t('calculations: regression, anomalies, k-means, kNN, scan', () => { assert.strictEqual(E("localML([1,2,3],[2,4,6],4)").prediction, 8); assert.strictEqual(JSON.stringify(E("iqrFlags([10,11,10,12,11,10,95,11]).anomalies")), '[6]'); assert.strictEqual(E("knnL([[1,1],[1.1,1],[5,5],[5.1,5]],['a','a','b','b'],[4.9,5],3)"), 'b'); assert.strictEqual(JSON.stringify(E("localScan('x\\nFailed 10.0.0.5\\nFailed 10.0.0.5\\nInvalid 10.0.0.5').brute_force_ips")), '["10.0.0.5"]'); });
+  await t('workspace state is saved and can be reset', () => { els.csv = { value: 'a,b\n1,2' }; E('saveState()'); assert.ok(JSON.parse(store['nf-state']).csv.includes('1,2')); E('resetState()'); assert.ok(!store['nf-state'] && ctx.reloaded); });
+  await t('server chat only runs when the API advertises the chat capability', async () => { await assert.rejects(E("serverChat('hi',[],()=>{})"), /offline/); });
+  console.log(`\n${n} passed, ${failed} failed`); process.exit(failed ? 1 : 0);
+})();

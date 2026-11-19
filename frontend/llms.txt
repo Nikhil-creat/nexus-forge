@@ -5,12 +5,12 @@
 Nexus Forge is a static site. Every tool runs in the browser; a FastAPI backend is optional.
 
 ## Pages
-- [Workspace](https://nikhil-creat.github.io/nexus-forge/workspace/): CSV analytics, regression, clustering, classification, anomaly detection and document Q&A
-- [Security lab](https://nikhil-creat.github.io/nexus-forge/security/): AES-256-GCM encrypted notes, SHA-256 file fingerprints and log analysis
-- [Projects](https://nikhil-creat.github.io/nexus-forge/projects/): selected machine learning and data engineering projects
-- [Architecture](https://nikhil-creat.github.io/nexus-forge/architecture/): technology stack and how the parts connect
-- [Credentials](https://nikhil-creat.github.io/nexus-forge/about/): education, internships and certifications
-- [FAQ](https://nikhil-creat.github.io/nexus-forge/faq/): hosting and configuration questions
+- [Workspace](https://nexus-forge.vercel.app/workspace/): CSV analytics, regression, clustering, classification, anomaly detection and document Q&A
+- [Security lab](https://nexus-forge.vercel.app/security/): AES-256-GCM encrypted notes, SHA-256 file fingerprints and log analysis
+- [Projects](https://nexus-forge.vercel.app/projects/): selected machine learning and data engineering projects
+- [Architecture](https://nexus-forge.vercel.app/architecture/): technology stack and how the parts connect
+- [Credentials](https://nexus-forge.vercel.app/about/): education, internships and certifications
+- [FAQ](https://nexus-forge.vercel.app/faq/): hosting and configuration questions
 
 ## Source
 - [GitHub repository](https://github.com/Nikhil-creat/nexus-forge): code, tests and deployment files

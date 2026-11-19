@@ -58,7 +58,8 @@ class Chat(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "time": time.time()}
+    caps = ["analytics", "ml", "security", "logs", "rag", "auth", "anomaly"] + (["chat"] if aiclient.pick()[0] else [])
+    return {"status": "ok", "caps": caps, "time": time.time()}
 
 
 @app.post("/api/auth/login")

@@ -1,10 +1,12 @@
 const $=id=>document.getElementById(id);
 const BASE=document.documentElement.dataset.base||'./';
 const API=String(window.NEXUS_API||'').trim().replace(/\/$/,'')||(()=>{try{return localStorage.getItem('api')||''}catch(e){return ''}})()||(location.port==='8080'?'http://localhost:8000':'');
-async function call(path,body){if(!API)throw new Error('offline');const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw new Error(r.status);return r.json()}
+const HEALTH=API?fetch(API+'/api/health').then(r=>{if(!r.ok)throw 0;return r.json()}).catch(()=>null):Promise.resolve(null);
+async function call(path,body){const h=await HEALTH,cap=String(path).split('/')[2];if(!API||!h||!(h.caps||[]).includes(cap))throw new Error('offline');const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw new Error(r.status);return r.json()}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-(function(){const el=$('apiState');if(!el)return;if(!API){el.textContent='Mode: runs fully in your browser';return}
-fetch(API+'/api/health').then(r=>{if(!r.ok)throw 0;el.textContent='API: online'}).catch(()=>{el.textContent='API: offline (browser mode)'})})();
+(function(){const el=$('apiState'),sm=$('stMode');
+if(!API){if(el)el.textContent='Mode: runs fully in your browser';return}
+HEALTH.then(h=>{const t=h?'API: online'+((h.caps||[]).length?' ('+h.caps.join(', ')+')':', no server AI key'):'API: unreachable, using your browser';if(el)el.textContent=t;if(sm)sm.textContent=h?'Mode: API online':'Mode: API unreachable, running in your browser'})})();
 function toggleNav(b){const n=document.querySelector('header nav');const o=n.classList.toggle('open');if(b&&b.setAttribute)b.setAttribute('aria-expanded',o)}
 ['click','change','input'].forEach(t=>document.addEventListener(t,e=>{const k=t==='click'?'act':t==='change'?'chg':'inp',a=e.target.closest('[data-'+k+']');if(a&&typeof window[a.dataset[k]]==='function')window[a.dataset[k]](a)}));
 const PAGES=[['Home',''],['Workspace','workspace/'],['Intelligence tools','workspace/#models'],['Security lab','security/'],['Projects','projects/'],['Architecture','architecture/'],['Credentials','about/'],['FAQ','faq/'],['GitHub','https://github.com/Nikhil-creat']];

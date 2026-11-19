@@ -17,6 +17,8 @@ def fs(href, pagedir):
         return None, ""
     elif path == "":
         return None, ""
+    elif path.startswith("/"):
+        full = os.path.join(R, path.lstrip("/"))
     else:
         full = os.path.normpath(os.path.join(pagedir, path))
     if path.endswith("/") or os.path.isdir(full):
@@ -58,7 +60,7 @@ for n, h in html.items():
             errs.append(f"{n}: bad JSON-LD ({e})")
     if re.search(r"\son\w+=", h) or "<style" in h or re.search(r'\sstyle="', h):
         errs.append(f"{n}: inline handler or style breaks the strict CSP")
-    if re.findall(r"<script(?![^>]*\bsrc=)(?![^>]*ld\+json)[^>]*>", h):
+    if re.findall(r"<script(?![^>]*\bsrc=)(?![^>]*ld\+json)(?![^>]*speculationrules)[^>]*>", h):
         errs.append(f"{n}: inline script")
     for img in re.findall(r"<img\b[^>]*>", h):
         if not re.search(r'\salt="[^"]+"', img):
@@ -66,8 +68,8 @@ for n, h in html.items():
     for c in re.findall(r"<canvas\b[^>]*>", h):
         if 'aria-label="' not in c:
             errs.append(f"{n}: canvas without aria-label")
-    if re.search(r'(?:href|src)="/(?!/)', h):
-        errs.append(f"{n}: root-relative link breaks GitHub Pages project sites")
+    if n != "404.html" and re.search(r'(?:href|src)="/(?!/)', h):
+        errs.append(f"{n}: use relative links (only 404.html may use root-relative ones)")
     for a in re.findall(r'(?:href|src)="([^"]+)"', h):
         full, frag = fs(a, pagedir)
         if full is None:
@@ -101,7 +103,15 @@ if want != got:
     errs.append(f"sitemap mismatch: {sorted(want ^ got)}")
 if glob.glob(R + "/**/*.map", recursive=True):
     errs.append("source map files must not be shipped")
-for f in ("robots.txt", "llms.txt", "favicon.ico", "favicon.svg", "og-image.png", "apple-touch-icon.png", "manifest.webmanifest", ".well-known/security.txt", ".nojekyll", "sw.js"):
+v = json.load(open(R + "/vercel.json"))
+hv = {x["key"] for x in v["headers"][0]["headers"]}
+for k in ("Content-Security-Policy", "Strict-Transport-Security", "X-Content-Type-Options"):
+    if k not in hv:
+        errs.append(f"vercel.json missing header {k}")
+for f in ("api/chat.js", "api/health.js", "api/_ai.js", "package.json"):
+    if not os.path.isfile(os.path.join(R, f)):
+        errs.append(f"missing {f}")
+for f in ("robots.txt", "llms.txt", "favicon.ico", "favicon.svg", "og-image.png", "apple-touch-icon.png", "manifest.webmanifest", ".well-known/security.txt", "sw.js"):
     if not os.path.isfile(os.path.join(R, f)):
         errs.append(f"missing {f}")
 print("\n".join(errs) if errs else f"OK: {len(html)} pages checked")

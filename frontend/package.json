@@ -1,0 +1,1 @@
+{ "name": "nexus-forge", "version": "3.0.0", "private": true, "description": "Static site plus Vercel Functions", "engines": { "node": ">=20" } }

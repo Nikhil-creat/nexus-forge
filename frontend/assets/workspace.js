@@ -19,12 +19,20 @@ async function runScan(){let r;try{r=await call('/api/security/scan',{text:$('lo
 call('/api/logs/ingest',{lines:$('logs').value.split('\n')}).catch(()=>{});
 $('o3').innerHTML='<span class="risk-'+r.level+'">Risk '+r.risk+'/100 ('+r.level+')</span>\n'+esc(JSON.stringify({findings:r.findings,brute_force_ips:r.brute_force_ips},null,2))}
 
+async function serverChat(m,hist,onTok){const h=await HEALTH;if(!API||!h||!(h.caps||[]).includes('chat'))throw new Error('offline');
+const r=await fetch(API+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m,history:hist,stream:true})});
+if(!r.ok){let e='';try{e=(await r.json()).error||''}catch(x){}throw new Error(e||'The server returned HTTP '+r.status)}
+if((r.headers.get('content-type')||'').includes('event-stream')&&r.body){const rd=r.body.getReader(),dc=new TextDecoder();let buf='',out='';
+for(;;){const x=await rd.read();if(x.done)break;buf+=dc.decode(x.value,{stream:true});const ls=buf.split('\n');buf=ls.pop();
+for(const l of ls){if(!l.startsWith('data:'))continue;let j;try{j=JSON.parse(l.slice(5))}catch(e){continue}if(j.error)throw new Error(j.error);if(j.d){out+=j.d;onTok(out)}}}
+if(!out)throw new Error('The server returned an empty answer.');return out}
+const j=await r.json();if(j.mode!=='live'||!j.reply)throw new Error('offline');onTok(j.reply);return j.reply}
 async function ask(){const m=$('msg').value.trim();if(!m)return;const log=$('chatlog');log.insertAdjacentHTML('beforeend','<p class="me"></p><p class="ai"></p>');
 const bs=log.querySelectorAll('p'),me=bs[bs.length-2],b=bs[bs.length-1];me.textContent=m;$('msg').value='';
-const done=t=>{b.textContent=t;log.scrollTop=log.scrollHeight};
-try{const r=await call('/api/chat',{message:m});if(r.mode!=='live')throw 0;done(r.reply);return}catch(e){}
-try{const t=await llm(SYSP,m,HIST,done);HIST=HIST.concat([{role:'user',content:m},{role:'assistant',content:t}]).slice(-6);done(t)}
-catch(x){const o=kbAnswer(m);done(x.message+(o?'\n\nOffline answer: '+o:''))}}
+const done=t=>{b.textContent=t;log.scrollTop=log.scrollHeight},keep=t=>{HIST=HIST.concat([{role:'user',content:m},{role:'assistant',content:t}]).slice(-6)};let se='';
+try{const t=await serverChat(m,HIST,done);keep(t);done(t);return}catch(e){se=e.message==='offline'?'':e.message}
+try{const t=await llm(SYSP,m,HIST,done);keep(t);done(t)}
+catch(x){const o=kbAnswer(m);done((se||x.message)+(o?'\n\nOffline answer: '+o:''))}}
 $('msg').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});
 
 let TOKEN='',DOCS=[];
@@ -71,28 +79,54 @@ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([html],{
 const SYSP='You are Nexus, an assistant for data analytics, ML and cybersecurity. Be concise.';
 function keyOf(){const el=$('gkey'),v=el&&el.value?String(el.value).replace(/["'\s]/g,''):'';if(v)return v;try{return sessionStorage.getItem('aikey')||''}catch(e){return ''}}
 function provider(k){if(k.startsWith('gsk_'))return'Groq';if(k.startsWith('sk-ant-'))return'Anthropic';if(k.startsWith('sk-or-'))return'OpenRouter';if(k.startsWith('AIza'))return'Gemini';if(k.startsWith('sk-'))return'OpenAI';return''}
-function saveKey(el){const k=String(el.value).replace(/["'\s]/g,'');try{sessionStorage.setItem('aikey',k)}catch(e){}const p=provider(k);setAI('AI: '+(p||'not connected'));
+function saveKey(el){const k=String(el.value).replace(/["'\s]/g,'');try{sessionStorage.setItem('aikey',k)}catch(e){}const p=provider(k);setAI('AI: '+(p||'not connected'));clearTimeout(dtimer);if(p&&k.length>=20)dtimer=setTimeout(()=>modelsFor(p,k).then(m=>note('Detected '+p+'. '+(ALLM[p]?ALLM[p].length+' models available, using '+m[0]+'.':'Using the default model '+m[0]+'.'))).catch(e=>note(e.message)),700);
 $('kstatus').textContent=!k?'No key entered. Groq, Gemini, Anthropic, OpenRouter and OpenAI keys are detected automatically.':p?'Detected: '+p+'. The key stays in this tab.':'Key format not recognized. Supported: Groq, Gemini, Anthropic, OpenRouter, OpenAI.'}
-const CHAIN={Groq:['llama-3.3-70b-versatile','llama-3.1-8b-instant'],OpenRouter:['openrouter/auto'],OpenAI:['gpt-4o-mini'],Gemini:['gemini-flash-latest','gemini-flash-lite-latest'],Anthropic:['claude-haiku-5-5']};
-const CACHE=new Map();let busy=false,reqs=0,HIST=[];
+const CHAIN={Groq:['openai/gpt-oss-120b','openai/gpt-oss-20b'],OpenRouter:['openrouter/auto'],OpenAI:['gpt-4o-mini'],Gemini:['gemini-flash-latest','gemini-flash-lite-latest'],Anthropic:['claude-haiku-5-5']};
+const PREF={Groq:[/gpt-oss-120b/,/gpt-oss-20b/,/llama-3\.3-70b/,/qwen/,/llama/],Gemini:[/^gemini-flash-latest$/,/^gemini-flash-lite-latest$/,/flash(?!-lite)/,/flash-lite/,/pro/],OpenAI:[/^gpt-4o-mini$/,/mini/,/^gpt-4o$/,/^gpt-/],Anthropic:[/haiku/,/sonnet/,/./],OpenRouter:[/^openrouter\/auto$/]};
+const SKIP=/whisper|tts|orpheus|guard|safeguard|embed|compound|moderation|image|audio|realtime|transcribe|dall-e|davinci|babbage|search|live|veo|imagen|robotics|computer-use|omni|nano-banana/i;
+const CACHE=new Map(),MODELS={},ALLM={};let busy=false,reqs=0,HIST=[],dtimer=0;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function note(t){const e=$('kstatus');if(e)e.textContent=t}
+async function listModels(p,k){let url,h;
+if(p==='Groq'){url='https://api.groq.com/openai/v1/models';h={Authorization:'Bearer '+k}}
+else if(p==='OpenAI'){url='https://api.openai.com/v1/models';h={Authorization:'Bearer '+k}}
+else if(p==='Gemini'){url='https://generativelanguage.googleapis.com/v1beta/models?pageSize=200';h={'x-goog-api-key':k}}
+else if(p==='Anthropic'){url='https://api.anthropic.com/v1/models';h={'x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}}
+else return null;
+const r=await fetch(url,{headers:h});if(!r.ok)throw{status:r.status,msg:''};const d=await r.json();
+const ids=p==='Gemini'?(d.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent')).map(m=>String(m.name).replace(/^models\//,'')):(d.data||[]).map(m=>m.id);
+return ids.filter(x=>!SKIP.test(x))}
+function rank(p,ids){const out=[];for(const re of PREF[p]||[])for(const id of ids)if(re.test(id)&&!out.includes(id))out.push(id);return out}
+function fillList(ids){const dl=$('mlist');if(dl)dl.innerHTML=ids.slice(0,60).map(i=>'<option value="'+esc(i)+'">').join('')}
+async function modelsFor(p,k){const mk=p+':'+k.slice(-8);if(MODELS[mk])return MODELS[mk];
+try{const ids=await listModels(p,k);if(ids&&ids.length){ALLM[p]=ids;fillList(ids);const r=rank(p,ids).slice(0,4);if(r.length){MODELS[mk]=r;return r}}}
+catch(e){if(e&&(e.status===401||e.status===403))throw new Error('Detected '+p+', but the key was rejected (HTTP '+e.status+'). Create a new key and paste it again.')}
+MODELS[mk]=CHAIN[p];return MODELS[mk]}
 async function send(p,k,model,sys,hist,u,onTok){const J={'Content-Type':'application/json'},msgs=hist.concat([{role:'user',content:u}]);let url,opt;
 if(p==='Gemini'){url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent';opt={method:'POST',headers:{...J,'x-goog-api-key':k},body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:msgs.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]})),generationConfig:{maxOutputTokens:1024}})}}
 else if(p==='Anthropic'){url='https://api.anthropic.com/v1/messages';opt={method:'POST',headers:{...J,'x-api-key':k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:700,system:sys,messages:msgs})}}
-else{url={Groq:'https://api.groq.com/openai/v1/chat/completions',OpenRouter:'https://openrouter.ai/api/v1/chat/completions',OpenAI:'https://api.openai.com/v1/chat/completions'}[p];opt={method:'POST',headers:{...J,Authorization:'Bearer '+k},body:JSON.stringify(Object.assign({model,messages:[{role:'system',content:sys}].concat(msgs)},p==='OpenAI'?{max_completion_tokens:700}:{max_tokens:700},onTok?{stream:true}:{}))}}
+else{url={Groq:'https://api.groq.com/openai/v1/chat/completions',OpenRouter:'https://openrouter.ai/api/v1/chat/completions',OpenAI:'https://api.openai.com/v1/chat/completions'}[p];
+const lim=p==='OpenAI'?{max_completion_tokens:1500}:{max_tokens:p==='Groq'?1500:900},rs=p==='Groq'&&/gpt-oss/.test(model)?{reasoning_effort:'low'}:{};
+opt={method:'POST',headers:{...J,Authorization:'Bearer '+k},body:JSON.stringify(Object.assign({model,messages:[{role:'system',content:sys}].concat(msgs)},lim,rs,onTok?{stream:true}:{}))}}
 const r=await fetch(url,opt);
 if(!r.ok){let m='';try{const d=await r.json();m=(d.error&&(d.error.message||d.error))||d.message||''}catch(e){}throw{status:r.status,msg:String(m).slice(0,160),wait:Number(r.headers&&r.headers.get&&r.headers.get('retry-after'))||0}}
-if(onTok&&r.body&&r.body.getReader&&p!=='Gemini'&&p!=='Anthropic'){const rd=r.body.getReader(),dc=new TextDecoder();let buf='',out='';for(;;){const x=await rd.read();if(x.done)break;buf+=dc.decode(x.value,{stream:true});const ls=buf.split('\n');buf=ls.pop();for(const l of ls){if(!l.startsWith('data:'))continue;const j=l.slice(5).trim();if(j==='[DONE]')continue;try{const t=JSON.parse(j).choices[0].delta.content;if(t){out+=t;onTok(out)}}catch(e){}}}if(out)return out;throw{status:502,msg:'empty stream'}}
-const d=await r.json();return p==='Gemini'?d.candidates[0].content.parts[0].text:p==='Anthropic'?d.content[0].text:d.choices[0].message.content}
-function explain(p,e){const s=e&&e.status,m=e&&e.msg?' Provider says: '+e.msg:'';
+if(onTok&&r.body&&r.body.getReader&&p!=='Gemini'&&p!=='Anthropic'){const rd=r.body.getReader(),dc=new TextDecoder();let buf='',out='';
+for(;;){const x=await rd.read();if(x.done)break;buf+=dc.decode(x.value,{stream:true});const ls=buf.split('\n');buf=ls.pop();
+for(const l of ls){if(!l.startsWith('data:'))continue;const j=l.slice(5).trim();if(j==='[DONE]')continue;try{const t=JSON.parse(j).choices[0].delta.content;if(t){out+=t;onTok(out)}}catch(e){}}}
+if(out)return out;throw{status:502,msg:'empty stream'}}
+const d=await r.json();let t='';try{t=p==='Gemini'?d.candidates[0].content.parts[0].text:p==='Anthropic'?d.content[0].text:d.choices[0].message.content}catch(e){}
+if(!t||!String(t).trim())throw{status:502,msg:'empty reply'};return t}
+function explain(p,e){const s=e&&e.status,m=e&&e.msg?' Provider says: '+e.msg:'',av=ALLM[p]?' Available models: '+ALLM[p].slice(0,8).join(', ')+'.':'';
 if(s===429)return p+' says you are over its rate or quota limit (HTTP 429).'+m+' Wait a minute and try again, check your usage in the provider console, or paste a key from another provider.';
-if(s===404)return p+' could not find the model (HTTP 404).'+m+' Type a current model name in the Model box.';
-return 'Detected '+p+', but the request failed (HTTP '+s+').'+m}
+if(s===404)return p+' could not find the model (HTTP 404).'+m+av+' Pick one from the Model box suggestions, or leave the box empty.';
+return 'Detected '+p+', but the request failed (HTTP '+s+').'+m+av}
 async function llm(sys,user,hist,onTok){hist=hist||[];const k=keyOf(),p=provider(k);
 if(!k)throw new Error('No AI is connected. Paste an API key above (Groq, Gemini, Anthropic, OpenRouter or OpenAI) or connect the backend.');
 if(!p)throw new Error('Key format not recognized. Supported: Groq, Gemini, Anthropic, OpenRouter, OpenAI.');
-const ov=$('gmodel')&&$('gmodel').value?String($('gmodel').value).trim():'',bad=/^(groq|gemini|openai|anthropic|openrouter)$/i.test(ov)||/\s/.test(ov),chain=ov&&!bad?[ov].concat(CHAIN[p]):CHAIN[p],u=user.slice(0,6000),ck=p+'|'+chain[0]+'|'+sys+'|'+JSON.stringify(hist)+'|'+u;
+const auto=await modelsFor(p,k),ov=$('gmodel')&&$('gmodel').value?String($('gmodel').value).trim():'',known=ALLM[p];
+const bad=!ov||/^(groq|gemini|openai|anthropic|openrouter)$/i.test(ov)||/\s|key|token|secret/i.test(ov)||(known&&!known.includes(ov));
+if(ov&&bad)note('The Model box value "'+ov.slice(0,40)+'" is not an available model, so it was ignored.');
+const chain=(bad?[]:[ov]).concat(auto.filter(m=>m!==ov)),u=user.slice(0,6000),ck=p+'|'+chain[0]+'|'+sys+'|'+JSON.stringify(hist)+'|'+u;
 if(CACHE.has(ck)){const c=CACHE.get(ck);if(onTok)onTok(c);return c}
 if(busy)throw new Error('Wait for the previous answer to finish.');busy=true;let last;
 try{for(const model of chain){for(let a=0;a<2;a++){try{note('Asking '+p+' ('+model+')...');reqs++;const t=await send(p,k,model,sys,hist,u,onTok);CACHE.set(ck,t);if(CACHE.size>30)CACHE.delete(CACHE.keys().next().value);note('Connected to '+p+' using '+model+'. Requests this tab: '+reqs);setAI('AI: '+p+' · '+model);return t}
@@ -134,5 +168,10 @@ const rows=Object.entries(r.columns).map(([c,v])=>'<tr><td>'+esc(c)+'</td><td>'+
 return '<table class="st"><caption>'+r.rows+' rows, '+Object.keys(r.columns).length+' columns</caption><tr><th>Column</th><th>Type</th><th>Summary</th></tr>'+rows+'</table>'}
 (function(){if(!$('tab-data'))return;showTab(location.hash.slice(1));addEventListener('hashchange',()=>showTab(location.hash.slice(1)));
 const tl=document.querySelector('.tabs');if(tl)tl.addEventListener('keydown',e=>{const i=TABS.findIndex(x=>$('tab-'+x)===document.activeElement);if(i<0)return;const n=e.key==='ArrowRight'?i+1:e.key==='ArrowLeft'?i-1:-1;if(n<0||n>=TABS.length)return;e.preventDefault();showTab(TABS[n]);$('tab-'+TABS[n]).focus()});
-const sm=$('stMode');if(sm)sm.textContent=API?'Mode: API connected':'Mode: runs in your browser';
+const sm=$('stMode');if(sm)sm.textContent=API?'Mode: checking the API...':'Mode: runs in your browser';
 const c=$('csv');if(c){c.addEventListener('dragover',e=>e.preventDefault());c.addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer&&e.dataTransfer.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{c.value=String(r.result).slice(0,200000)};r.readAsText(f)})}})();
+const SAVE=['csv','xs','ys','px','series','doc','q','pts','kk','tr','qq','logs'];
+function saveState(){try{const s={};SAVE.forEach(i=>{if($(i))s[i]=$(i).value});localStorage.setItem('nf-state',JSON.stringify(s))}catch(e){}}
+function resetState(){try{localStorage.removeItem('nf-state')}catch(e){}location.reload()}
+(function(){if(!$('tab-data'))return;try{const s=JSON.parse(localStorage.getItem('nf-state')||'{}');SAVE.forEach(i=>{if(typeof s[i]==='string'&&$(i))$(i).value=s[i]})}catch(e){}
+document.addEventListener('input',e=>{if(e.target&&SAVE.includes(e.target.id))saveState()})})();

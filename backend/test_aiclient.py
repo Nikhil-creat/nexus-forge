@@ -41,12 +41,12 @@ def test_falls_back_to_smaller_model(monkeypatch):
 
     def fake(name, key, model, system, user):
         models.append(model)
-        if model.endswith("versatile"):
+        if model.endswith("120b"):
             raise err(429)
         return "small"
 
     monkeypatch.setattr(aiclient, "_request", fake)
-    assert aiclient.complete("s", "u", sleep=lambda s: None) == "small" and models[-1] == "llama-3.1-8b-instant"
+    assert aiclient.complete("s", "u", sleep=lambda s: None) == "small" and models[-1] == "openai/gpt-oss-20b"
 
 
 def test_bad_key_and_exhausted(monkeypatch):

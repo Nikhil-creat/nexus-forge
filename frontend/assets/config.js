@@ -1,3 +1,3 @@
-// Optional: set to your API origin after deploying the backend, for example https://your-api.onrender.com
-// Leave empty to run everything in the browser (GitHub Pages works with no backend).
-window.NEXUS_API="";
+// Same-origin Vercel Functions (/api/*). Set to an empty string to run everything in the browser,
+// or to another API origin such as https://your-api.onrender.com.
+window.NEXUS_API=location.origin;

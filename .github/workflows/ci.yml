@@ -11,7 +11,9 @@ jobs:
       - run: pip install -r backend/requirements.txt
       - run: cd backend && pytest -q
       - run: docker build -t nexus-forge-api backend
-      - name: Frontend checks
+      - name: Frontend and functions checks
         run: |
           python scripts/check_site.py
-          for f in frontend/assets/*.js frontend/sw.js; do node --check "$f"; done
+          for f in frontend/assets/*.js frontend/api/*.js frontend/sw.js scripts/*.js; do node --check "$f"; done
+          node scripts/test-api.js
+          node scripts/test-browser.js
