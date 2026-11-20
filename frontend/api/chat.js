@@ -1,6 +1,8 @@
 'use strict';
 const { pick, complete } = require('./_ai.js');
 const SYSTEM = 'You are Nexus, an assistant for data analytics, machine learning and cybersecurity. Be concise and accurate.';
+const AGENT = 'You are Nexus, a data and security analyst agent working inside a browser workspace. Tools available: analyze_csv(), detect_anomalies(values), fit_regression(x,y,predict), scan_logs(text), cluster(k). Omitted arguments mean "use the workspace inputs". Reply with ONLY one JSON object: {"tool":"name","args":{}} to call a tool, or {"final":"your answer"} when done. Never invent numbers. Use at most 3 tool calls.';
+let budget = { d: '', n: 0 };
 const hits = new Map();
 
 function limited(ip) {
@@ -8,6 +10,12 @@ function limited(ip) {
   a.push(now); hits.set(ip, a);
   if (hits.size > 500) hits.clear();
   return a.length > (Number(process.env.RATE_LIMIT) || 20);
+}
+function overBudget() {
+  const d = new Date().toISOString().slice(0, 10);
+  if (budget.d !== d) budget = { d, n: 0 };
+  budget.n++;
+  return budget.n > (Number(process.env.DAILY_LIMIT) || 400);
 }
 function sameOrigin(req) {
   const o = req.headers.origin;
@@ -21,16 +29,18 @@ async function handler(req, res) {
   if (!sameOrigin(req)) return res.status(403).json({ error: 'Origin not allowed.' });
   const ip = String(req.headers['x-forwarded-for'] || (req.socket && req.socket.remoteAddress) || '?').split(',')[0].trim();
   if (limited(ip)) return res.status(429).json({ error: 'Too many requests. Try again in a minute.' });
+  if (overBudget()) return res.status(429).json({ error: 'The daily request limit for this site was reached. Try again tomorrow or paste your own API key in the Assistant tab.' });
   const b = req.body && typeof req.body === 'object' ? req.body : {};
   const msg = typeof b.message === 'string' ? b.message.trim() : '';
   if (!msg || msg.length > 2000) return res.status(400).json({ error: 'Send a message of 1 to 2000 characters.' });
   const hist = Array.isArray(b.history)
     ? b.history.slice(-6).filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string').map(m => ({ role: m.role, content: m.content.slice(0, 2000) }))
     : [];
+  const system = b.persona === 'agent' ? AGENT : SYSTEM;
   if (!pick()) return res.status(200).json({ mode: 'offline', reply: 'No AI key is configured on the server.' });
   if (b.stream !== true) {
     try {
-      const r = await complete({ system: SYSTEM, user: msg, history: hist });
+      const r = await complete({ system: system, user: msg, history: hist });
       return res.status(200).json({ mode: 'live', reply: r.text, provider: r.provider, model: r.model });
     } catch (e) { return res.status(502).json({ error: e.message }); }
   }
@@ -41,7 +51,7 @@ async function handler(req, res) {
   let sent = 0;
   const w = o => res.write('data: ' + JSON.stringify(o) + '\n\n');
   try {
-    const r = await complete({ system: SYSTEM, user: msg, history: hist, onToken: t => { w({ d: t.slice(sent) }); sent = t.length; } });
+    const r = await complete({ system: system, user: msg, history: hist, onToken: t => { w({ d: t.slice(sent) }); sent = t.length; } });
     if (sent === 0) w({ d: r.text });
     w({ done: true, provider: r.provider, model: r.model });
   } catch (e) { w({ error: e.message }); }
@@ -49,3 +59,4 @@ async function handler(req, res) {
 }
 module.exports = handler;
 module.exports._hits = hits;
+module.exports._reset = () => { hits.clear(); budget = { d: '', n: 0 }; };

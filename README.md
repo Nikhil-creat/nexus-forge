@@ -13,10 +13,17 @@ Static pages plus Vercel Functions. Every tool also works in the browser with no
 3. **No key:** built-in answers for common data, ML and security questions.
 `/api/health` advertises capabilities, so the site never calls an endpoint that does not exist.
 
+## Agent mode and voice
+- **Agent mode** (Assistant tab): the AI chooses among local tools (analyze CSV, anomalies, regression, log scan, clustering), sees the results and answers. It works on your workspace data. Without any AI it routes to the matching tool by keywords.
+- **Voice:** speak your question (English, Telugu or Hindi, via the browser's speech service) and optionally have answers read aloud.
+
+## Protecting your AI key
+The server function limits requests per visitor (`RATE_LIMIT`, default 20 per minute) and per day for the whole site (`DAILY_LIMIT`, default 400), checks the request origin, caps message and history size, and only accepts server-defined prompts. Also set spending limits in your provider console.
+
 ## Deploy on Vercel
 1. Import the GitHub repository. Root Directory: `frontend`. Framework Preset: Other. No build command.
 2. Settings, Environment Variables: add one AI key (see `.env.example`), then redeploy.
-3. Run `sh scripts/set-domain.sh https://your-site.vercel.app` once (canonical URLs, sitemap, social tags), commit and push.
+3. Update from a new zip with one command: `sh ship.sh https://your-real-url.vercel.app` (run from the unzipped folder). It checks that the URL answers `/api/health`, rewrites canonical tags, sitemap and social tags, finds your local repository, commits and pushes.
 4. Optional custom domain: Settings, Domains, then run the same script with the new URL.
 
 ## Develop locally

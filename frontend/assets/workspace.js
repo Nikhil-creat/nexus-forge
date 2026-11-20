@@ -19,17 +19,47 @@ async function runScan(){let r;try{r=await call('/api/security/scan',{text:$('lo
 call('/api/logs/ingest',{lines:$('logs').value.split('\n')}).catch(()=>{});
 $('o3').innerHTML='<span class="risk-'+r.level+'">Risk '+r.risk+'/100 ('+r.level+')</span>\n'+esc(JSON.stringify({findings:r.findings,brute_force_ips:r.brute_force_ips},null,2))}
 
-async function serverChat(m,hist,onTok){const h=await HEALTH;if(!API||!h||!(h.caps||[]).includes('chat'))throw new Error('offline');
-const r=await fetch(API+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m,history:hist,stream:true})});
+async function serverChat(m,hist,onTok,persona){const h=await HEALTH,cap=persona==='agent'?'agent':'chat';if(!API||!h||!(h.caps||[]).includes(cap))throw new Error('offline');
+const r=await fetch(API+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m,history:hist,stream:true,persona:persona||'assistant'})});
 if(!r.ok){let e='';try{e=(await r.json()).error||''}catch(x){}throw new Error(e||'The server returned HTTP '+r.status)}
 if((r.headers.get('content-type')||'').includes('event-stream')&&r.body){const rd=r.body.getReader(),dc=new TextDecoder();let buf='',out='';
 for(;;){const x=await rd.read();if(x.done)break;buf+=dc.decode(x.value,{stream:true});const ls=buf.split('\n');buf=ls.pop();
 for(const l of ls){if(!l.startsWith('data:'))continue;let j;try{j=JSON.parse(l.slice(5))}catch(e){continue}if(j.error)throw new Error(j.error);if(j.d){out+=j.d;onTok(out)}}}
 if(!out)throw new Error('The server returned an empty answer.');return out}
 const j=await r.json();if(j.mode!=='live'||!j.reply)throw new Error('offline');onTok(j.reply);return j.reply}
+function vlang(){const e=$('vlang');return e&&e.value?e.value:'en-IN'}
+function say(t){const c=$('readaloud');if(!c||!c.checked||!window.speechSynthesis||!window.SpeechSynthesisUtterance)return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(String(t).slice(0,600));u.lang=vlang();speechSynthesis.speak(u)}catch(e){}}
+let rec=null;
+function speak(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition,st=$('voicest');
+if(!SR){st.textContent='Speech input is not supported in this browser. Try Chrome.';return}
+if(rec){rec.stop();return}
+rec=new SR();rec.lang=vlang();rec.interimResults=true;
+rec.onresult=e=>{let t='';for(const r of e.results)t+=r[0].transcript;$('msg').value=t};
+rec.onerror=e=>{st.textContent='Voice input stopped: '+(e.error||'error')+'.'};
+rec.onend=()=>{rec=null;if(st.textContent==='Listening...')st.textContent='';if($('msg').value.trim())ask()};
+st.textContent='Listening...';try{rec.start()}catch(e){rec=null;st.textContent='Could not start the microphone.'}}
+const AGENT_SYS='You are Nexus, a data and security analyst agent working inside a browser workspace. Tools available: analyze_csv(), detect_anomalies(values), fit_regression(x,y,predict), scan_logs(text), cluster(k). Omitted arguments mean "use the workspace inputs". Reply with ONLY one JSON object: {"tool":"name","args":{}} to call a tool, or {"final":"your answer"} when done. Never invent numbers. Use at most 3 tool calls.';
+function toolRun(name,a){a=a||{};
+if(name==='analyze_csv')return localAnalytics($('csv').value);
+if(name==='detect_anomalies'){const v=Array.isArray(a.values)?a.values.map(Number):$('series').value.split(',').map(Number);if(v.length<4||v.some(isNaN))throw new Error('Need at least 4 numbers');return iqrFlags(v)}
+if(name==='fit_regression'){const x=Array.isArray(a.x)?a.x.map(Number):$('xs').value.split(',').map(Number),y=Array.isArray(a.y)?a.y.map(Number):$('ys').value.split(',').map(Number),p=a.predict!==undefined?Number(a.predict):Number($('px').value);if(x.length<2||x.length!==y.length||[...x,...y,p].some(isNaN))throw new Error('Need matching numeric x and y lists');return localML(x,y,p)}
+if(name==='scan_logs')return localScan(typeof a.text==='string'?a.text:$('logs').value);
+if(name==='cluster'){const P=rows($('pts').value).map(r=>[+r[0],+r[1]]),k=Math.max(2,Math.min(8,Number(a.k)||3));if(P.length<k||P.some(p=>p.some(isNaN)))throw new Error('Need at least k numeric points');return km(P,k)}
+throw new Error('Unknown tool '+name)}
+function heuristicTool(q){q=q.toLowerCase();return/anomal|outlier/.test(q)?'detect_anomalies':/regress|predict|trend/.test(q)?'fit_regression':/log|attack|inject|brute|scan/.test(q)?'scan_logs':/cluster|group/.test(q)?'cluster':/csv|data|column|analy|summar/.test(q)?'analyze_csv':''}
+function parseAgent(t){const m=String(t).match(/\{[\s\S]*\}/);if(!m)return{final:String(t).trim()};try{const j=JSON.parse(m[0]);return j&&(j.tool||j.final!==undefined)?j:{final:String(t).trim()}}catch(e){return{final:String(t).trim()}}}
+async function brain(user,hist){try{return await serverChat(user,hist,()=>{},'agent')}catch(e){if(e.message!=='offline'&&!keyOf())throw e}return llm(AGENT_SYS,user,hist)}
+async function runAgent(q,b,log){const lines=[],show=t=>{b.textContent=lines.concat(t?[t]:[]).join('\n');log.scrollTop=log.scrollHeight};let hist=[],user=q;
+try{for(let i=0;i<4;i++){const j=parseAgent(await brain(user,hist));
+if(j.final!==undefined){show(String(j.final));say(String(j.final));return}
+lines.push('Tool: '+j.tool+'('+JSON.stringify(j.args||{}).slice(0,80)+')');show();let obs;try{obs=JSON.stringify(toolRun(j.tool,j.args)).slice(0,1500)}catch(e){obs='Error: '+e.message}
+hist=hist.concat([{role:'user',content:user},{role:'assistant',content:JSON.stringify(j)}]).slice(-8);user='Tool result: '+obs}
+show('Stopped after the tool-call limit.')}
+catch(e){const t=heuristicTool(q);if(t){try{lines.push('Tool: '+t+'() (no AI connected)');show(JSON.stringify(toolRun(t,{})).slice(0,900));return}catch(x){show(x.message);return}}show('Agent mode needs an AI. '+e.message)}}
 async function ask(){const m=$('msg').value.trim();if(!m)return;const log=$('chatlog');log.insertAdjacentHTML('beforeend','<p class="me"></p><p class="ai"></p>');
 const bs=log.querySelectorAll('p'),me=bs[bs.length-2],b=bs[bs.length-1];me.textContent=m;$('msg').value='';
-const done=t=>{b.textContent=t;log.scrollTop=log.scrollHeight},keep=t=>{HIST=HIST.concat([{role:'user',content:m},{role:'assistant',content:t}]).slice(-6)};let se='';
+if($('agentmode')&&$('agentmode').checked)return runAgent(m,b,log);
+const done=t=>{b.textContent=t;log.scrollTop=log.scrollHeight},keep=t=>{HIST=HIST.concat([{role:'user',content:m},{role:'assistant',content:t}]).slice(-6);say(t)};let se='';
 try{const t=await serverChat(m,HIST,done);keep(t);done(t);return}catch(e){se=e.message==='offline'?'':e.message}
 try{const t=await llm(SYSP,m,HIST,done);keep(t);done(t)}
 catch(x){const o=kbAnswer(m);done((se||x.message)+(o?'\n\nOffline answer: '+o:''))}}

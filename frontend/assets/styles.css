@@ -86,6 +86,9 @@ dialog.pal{background:var(--panel);color:var(--ink);border:1px solid var(--line)
 dialog.pal input{margin-bottom:8px}dialog.pal ul{list-style:none;margin:0;padding:0}dialog.pal a{display:block;padding:8px 10px;color:var(--ink);text-decoration:none;border-radius:8px}dialog.pal a:hover,dialog.pal a:focus{background:var(--line)}
 
 [hidden]{display:none!important}
+.opts{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;margin:8px 0;font-size:13px;color:var(--mute)}.opts label{display:inline-flex;gap:6px;align-items:center;text-transform:none;letter-spacing:0;margin:0;font-size:13px}
+select{background:#050302;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:13px system-ui,sans-serif}input[type=checkbox]{width:auto;accent-color:var(--cy)}
+#chatlog p.me{margin-left:10%}
 body{font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,system-ui,sans-serif}
 h1,h2,h3,summary,.logo,.btn,.badge,.chips span,header nav a,.tabs button,.fh{font-family:Anta,system-ui,sans-serif}
 textarea,input{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif}
