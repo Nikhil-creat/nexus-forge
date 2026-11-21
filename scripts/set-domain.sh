@@ -15,7 +15,7 @@ case "$NEW" in
   http://*) [ "$ALLOW_HTTP" = "1" ] || { echo "Use an https:// URL."; exit 1;};;
 esac
 if [ "$NO_CHECK" != "1" ] && command -v curl >/dev/null 2>&1; then
-  OUT=$(curl -s --max-time 20 -w '\n%{http_code}' "$NEW/api/health" 2>/dev/null || true)
+  OUT=$(curl -sL --max-time 20 -w '\n%{http_code}' "$NEW/api/health/" 2>/dev/null || true)
   CODE=$(printf '%s' "$OUT" | tail -n 1)
   if ! printf '%s' "$OUT" | grep -q '"status":"ok"'; then
     echo "Check failed for $NEW (HTTP ${CODE:-none})."

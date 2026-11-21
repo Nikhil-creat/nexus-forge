@@ -27,5 +27,12 @@ git rm -rq --ignore-unmatch frontend .github scripts backend deploy >/dev/null 2
 cp -r "$SRC"/. "$REPO"/
 git add -A
 if git diff --cached --quiet; then echo "No new changes to commit."; else git commit -q -m "${MSG:-Update Nexus Forge}"; fi
-git push 2>/dev/null || git push -u origin HEAD
-echo "Done. Vercel redeploys in about a minute. Then open $URL/api/health"
+git push -u origin HEAD || true
+BR=$(git rev-parse --abbrev-ref HEAD)
+if [ "$(git rev-parse HEAD)" = "$(git rev-parse "origin/$BR" 2>/dev/null)" ]; then
+  echo "PUSHED OK: $(git log -1 --format='%h %s') is on GitHub (branch $BR)."
+  echo "Vercel redeploys in about a minute. Then open $URL/api/health"
+else
+  echo "NOT PUSHED. Run: cd $REPO && git push   and read the error (usually the token or permissions)."
+  exit 1
+fi
