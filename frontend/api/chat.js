@@ -1,42 +1,31 @@
 'use strict';
 const { pick, complete } = require('./_ai.js');
+const { sameOrigin, ipOf, makeLimiter } = require('./_guard.js');
 const SYSTEM = 'You are Nexus, an assistant for data analytics, machine learning and cybersecurity. Be concise and accurate.';
 const AGENT = 'You are Nexus, a data and security analyst agent working inside a browser workspace. Tools available: analyze_csv(), detect_anomalies(values), fit_regression(x,y,predict), scan_logs(text), cluster(k). Omitted arguments mean "use the workspace inputs". Reply with ONLY one JSON object: {"tool":"name","args":{}} to call a tool, or {"final":"your answer"} when done. Never invent numbers. Use at most 3 tool calls.';
 let budget = { d: '', n: 0 };
-const hits = new Map();
-
-function limited(ip) {
-  const now = Date.now(), a = (hits.get(ip) || []).filter(t => now - t < 60000);
-  a.push(now); hits.set(ip, a);
-  if (hits.size > 500) hits.clear();
-  return a.length > (Number(process.env.RATE_LIMIT) || 20);
-}
+const limited = makeLimiter(() => Number(process.env.RATE_LIMIT) || 20);
+const RAG = 'You answer questions using only the context the user provides. Cite passages as [1], [2]. If the answer is not in the context, say so. Be concise.';
 function overBudget() {
   const d = new Date().toISOString().slice(0, 10);
   if (budget.d !== d) budget = { d, n: 0 };
   budget.n++;
   return budget.n > (Number(process.env.DAILY_LIMIT) || 400);
 }
-function sameOrigin(req) {
-  const o = req.headers.origin;
-  if (!o) return true;
-  try { if (new URL(o).host === req.headers.host) return true; } catch (e) { return false; }
-  return String(process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean).includes(o);
-}
 async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') { res.setHeader('Allow', 'POST'); return res.status(405).json({ error: 'Use POST.' }); }
   if (!sameOrigin(req)) return res.status(403).json({ error: 'Origin not allowed.' });
-  const ip = String(req.headers['x-forwarded-for'] || (req.socket && req.socket.remoteAddress) || '?').split(',')[0].trim();
-  if (limited(ip)) return res.status(429).json({ error: 'Too many requests. Try again in a minute.' });
+  if (limited(ipOf(req))) return res.status(429).json({ error: 'Too many requests. Try again in a minute.' });
   if (overBudget()) return res.status(429).json({ error: 'The daily request limit for this site was reached. Try again tomorrow or paste your own API key in the Assistant tab.' });
   const b = req.body && typeof req.body === 'object' ? req.body : {};
   const msg = typeof b.message === 'string' ? b.message.trim() : '';
-  if (!msg || msg.length > 2000) return res.status(400).json({ error: 'Send a message of 1 to 2000 characters.' });
+  const max = b.persona === 'rag' ? 6000 : 2000;
+  if (!msg || msg.length > max) return res.status(400).json({ error: 'Send a message of 1 to ' + max + ' characters.' });
   const hist = Array.isArray(b.history)
     ? b.history.slice(-6).filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string').map(m => ({ role: m.role, content: m.content.slice(0, 2000) }))
     : [];
-  const system = b.persona === 'agent' ? AGENT : SYSTEM;
+  const system = b.persona === 'agent' ? AGENT : b.persona === 'rag' ? RAG : SYSTEM;
   if (!pick()) return res.status(200).json({ mode: 'offline', reply: 'No AI key is configured on the server.' });
   if (b.stream !== true) {
     try {
@@ -58,5 +47,4 @@ async function handler(req, res) {
   res.end();
 }
 module.exports = handler;
-module.exports._hits = hits;
-module.exports._reset = () => { hits.clear(); budget = { d: '', n: 0 }; };
+module.exports._reset = () => { limited.reset(); budget = { d: '', n: 0 }; };

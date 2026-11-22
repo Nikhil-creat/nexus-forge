@@ -2,7 +2,7 @@
 
 > Open source workspace that combines data analytics, machine learning, AI document Q&A and cybersecurity tools. Built by Nikhil Chary Sriramoju, a final-year B.Tech Computer Science student in Telangana, India.
 
-Nexus Forge is a static site. Every tool runs in the browser; a FastAPI backend is optional.
+Nexus Forge is a static site with serverless functions on Vercel. Every tool also runs in the browser.
 
 ## Pages
 - [Workspace](https://nexus-forge-frontend.vercel.app/workspace/): CSV analytics, regression, clustering, classification, anomaly detection and document Q&A

@@ -17,6 +17,15 @@ Static pages plus Vercel Functions. Every tool also works in the browser with no
 - **Agent mode** (Assistant tab): the AI chooses among local tools (analyze CSV, anomalies, regression, log scan, clustering), sees the results and answers. It works on your workspace data. Without any AI it routes to the matching tool by keywords.
 - **Voice:** speak your question (English, Telugu or Hindi, via the browser's speech service) and optionally have answers read aloud.
 
+## Documents, sessions, sharing and Telugu
+- **Documents:** upload .txt, .md, .csv, .json, .html or .docx files (read in the browser, never uploaded). Passages are ranked with BM25 and the answer cites its sources. PDF is not supported yet.
+- **Sessions:** save named snapshots of your workspace on this device.
+- **Share links:** `Create share link` puts the (compressed) workspace inside the link, nothing is stored. Optional `short link` stores it on the server for 30 days; it appears only when a database is connected (see below).
+- **Telugu:** language selector in the header and footer. Static interface text is translated (`frontend/assets/te.js`, loaded only when needed); tool results and AI answers appear in the language you ask in.
+
+## Optional: short links with a free database
+Vercel project, Storage, create an Upstash Redis database (free tier) and connect it to the project. This adds `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` (or `KV_REST_API_URL` and `KV_REST_API_TOKEN`). Redeploy; `/api/health` then lists `share`.
+
 ## Protecting your AI key
 The server function limits requests per visitor (`RATE_LIMIT`, default 20 per minute) and per day for the whole site (`DAILY_LIMIT`, default 400), checks the request origin, caps message and history size, and only accepts server-defined prompts. Also set spending limits in your provider console.
 

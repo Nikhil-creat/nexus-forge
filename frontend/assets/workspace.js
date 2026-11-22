@@ -73,12 +73,47 @@ const pt=(y,i)=>[20+i*(w-40)/Math.max(v.length-1,1),h-20-(y-mn)/sp*(h-40)];x.str
 x.fillStyle='#FAD53E';bad.forEach(i=>{const[a,b]=pt(v[i],i);x.beginPath();x.arc(a,b,9,0,7);x.fill()})}
 async function runAnom(){const v=$('series').value.split(',').map(Number);if(v.length<4||v.some(isNaN)){$('o4').textContent='Enter at least 4 numbers.';return}
 let r;try{r=await call('/api/anomaly',{values:v})}catch(e){r=iqrFlags(v)}drawSeries(v,r.anomalies);$('o4').textContent=(r.anomalies.length?'Anomalies at positions '+r.anomalies.map(i=>(i+1)+' (value '+v[i]+')').join(', '):'No anomalies found.')+'\nNormal range: '+r.bounds[0]+' to '+r.bounds[1]}
-const tk=t=>t.toLowerCase().match(/[a-z0-9]+/g)||[];
-async function addDoc(){const t=$('doc').value;try{const r=await call('/api/rag/add',{title:'pasted',text:t});$('o5').textContent='Indexed '+r.chunks+' passages on the server.'}catch(e){DOCS=t.split(/\n\s*\n/).filter(x=>x.trim().length>20);$('o5').textContent='Server offline. Indexed '+DOCS.length+' passages in your browser.'}}
-async function askDoc(){const q=$('q').value;try{const r=await call('/api/rag/ask',{question:q});$('o5').textContent=r.answer+'\n\nSources: '+r.sources.join(', ')+(r.mode?' ('+r.mode+')':'')}catch(e){const w=new Set(tk(q));
-const top=DOCS.map(d=>[tk(d).filter(x=>w.has(x)).length,d]).sort((a,b)=>b[0]-a[0]).filter(x=>x[0]>0).slice(0,3).map(x=>x[1]);
-if(!top.length){$('o5').textContent='No match. Index a document first.';return}
-try{$('o5').textContent=await llm('Answer only from the context. If the answer is not there, say so. Be concise.','Context:\n'+top.join('\n\n')+'\n\nQuestion: '+q)}catch(x){$('o5').textContent=top[0]}}}
+const tk=t=>String(t).toLowerCase().match(/[\p{L}\p{N}]+/gu)||[];
+let CH=[];
+function chunkText(t){const clean=String(t).replace(/\r/g,'').replace(/[ \t]+/g,' ').trim(),out=[];let cur='';
+for(const p of clean.split(/\n{2,}/)){if(cur&&(cur+'\n'+p).length>700){out.push(cur.trim());cur=''}
+if(p.length>900){if(cur){out.push(cur.trim());cur=''}for(let i=0;i<p.length;i+=700)out.push(p.slice(i,i+800))}else cur+=(cur?'\n':'')+p}
+if(cur.trim())out.push(cur.trim());return out.filter(x=>x.length>1)}
+function prep(name,t){return chunkText(t).map(x=>{const w=tk(x),tf={};w.forEach(a=>{tf[a]=(tf[a]||0)+1});return{name,t:x,tf,len:w.length||1}})}
+function bm25(q,chunks){const qs=[...new Set(tk(q).filter(w=>w.length>1))],N=chunks.length;if(!N||!qs.length)return[];const avg=chunks.reduce((a,c)=>a+c.len,0)/N||1,df={};
+qs.forEach(w=>{df[w]=chunks.filter(c=>c.tf[w]).length});
+return chunks.map(c=>({c,s:qs.reduce((a,w)=>{const f=c.tf[w]||0;if(!f)return a;const idf=Math.log(1+(N-df[w]+.5)/(df[w]+.5));return a+idf*f*2.2/(f+1.2*(.25+.75*c.len/avg))},0)})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s)}
+async function inflateRaw(u8){const ds=new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'));return new Uint8Array(await new Response(ds).arrayBuffer())}
+async function docxText(ab){const u=new Uint8Array(ab),dv=new DataView(ab);let i=u.length-22;while(i>=0&&dv.getUint32(i,true)!==0x06054b50)i--;if(i<0)throw new Error('This is not a valid .docx file.');
+const n=dv.getUint16(i+10,true);let p=dv.getUint32(i+16,true);
+for(let k=0;k<n;k++){if(dv.getUint32(p,true)!==0x02014b50)break;const meth=dv.getUint16(p+10,true),csz=dv.getUint32(p+20,true),nl=dv.getUint16(p+28,true),el=dv.getUint16(p+30,true),cl=dv.getUint16(p+32,true),off=dv.getUint32(p+42,true),name=new TextDecoder().decode(u.subarray(p+46,p+46+nl));
+if(name==='word/document.xml'){const start=off+30+dv.getUint16(off+26,true)+dv.getUint16(off+28,true),data=u.subarray(start,start+csz),raw=meth===0?data:await inflateRaw(data);
+return new TextDecoder().decode(raw).replace(/<\/w:p>/g,'\n\n').replace(/<w:tab\/>/g,' ').replace(/<[^>]+>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&')}
+p+=46+nl+el+cl}
+throw new Error('No text was found in this .docx file.')}
+async function readDoc(f){const n=f.name.toLowerCase();
+if(n.endsWith('.pdf'))throw new Error('PDF files cannot be read in the browser yet. Copy the text and paste it instead.');
+if(n.endsWith('.docx'))return docxText(await f.arrayBuffer());
+const t=await f.text();
+if(/\.html?$/.test(n)){const d=new DOMParser().parseFromString(t,'text/html');d.querySelectorAll('script,style').forEach(e=>e.remove());return d.body.textContent}
+return t}
+function renderDocs(){const st=$('docst');if(!st)return;if(!CH.length){st.textContent='No documents indexed yet.';return}const c={};CH.forEach(x=>{c[x.name]=(c[x.name]||0)+1});
+st.textContent=Object.keys(c).length+' document'+(Object.keys(c).length>1?'s':'')+', '+CH.length+' passages: '+Object.entries(c).map(([k,v])=>k+' ('+v+')').join(', ')}
+async function addFiles(input){const st=$('docst'),msgs=[];
+for(const f of [...input.files].slice(0,8)){if(f.size>3000000){msgs.push(f.name+' is over 3 MB and was skipped.');continue}
+try{const t=await readDoc(f),p=prep(f.name,t);if(!p.length){msgs.push(f.name+' has no text.');continue}CH=CH.filter(x=>x.name!==f.name).concat(p)}catch(e){msgs.push(f.name+': '+e.message)}}
+renderDocs();if(msgs.length&&st)st.textContent+=' | '+msgs.join(' ');try{input.value=''}catch(e){}}
+function addDoc(){const t=$('doc').value;if(!t.trim()){$('o5').textContent='Paste some text first.';return}CH=CH.filter(x=>x.name!=='Pasted text').concat(prep('Pasted text',t));renderDocs();$('o5').textContent='Indexed. Now ask a question.'}
+function clearDocs(){CH=[];renderDocs();$('o5').textContent='Documents cleared.'}
+async function brainDoc(q,ctxs){const msg='Context:\n'+ctxs+'\n\nQuestion: '+q;
+try{return await serverChat(msg,[],()=>{},'rag')}catch(e){if(e.message!=='offline'&&!keyOf())throw e}
+return llm('Answer using only the context. Cite passages as [1], [2]. If the answer is not in the context, say so. Be concise.',msg)}
+async function askDoc(){const q=$('q').value.trim(),o=$('o5');if(!q)return;
+try{const r=await call('/api/rag/ask',{question:q});o.textContent=r.answer+'\n\nSources: '+r.sources.join(', ');return}catch(e){}
+if(!CH.length){o.textContent='Add a document first: upload files, or paste text and press Index.';return}
+const top=bm25(q,CH).slice(0,4);if(!top.length){o.textContent='No matching passage was found in your documents.';return}
+const ctxs=top.map((x,i)=>'['+(i+1)+'] ('+x.c.name+') '+x.c.t).join('\n\n'),src='\n\nSources:\n'+top.map((x,i)=>'['+(i+1)+'] '+x.c.name+': '+x.c.t.slice(0,110).replace(/\s+/g,' ')+'…').join('\n');
+o.textContent='Searching...';try{o.textContent=(await brainDoc(q,ctxs))+src}catch(e){o.textContent=top[0].c.t+src+'\n\n(No AI is connected, so this is the best matching passage.)'}}
 function auditPw(){const p=$('pw').value;const pool=(/[a-z]/.test(p)?26:0)+(/[A-Z]/.test(p)?26:0)+(/\d/.test(p)?10:0)+(/\W/.test(p)?32:0);let bits=pool?Math.round(p.length*Math.log2(pool)):0;
 if(['password','123456','qwerty','admin','letmein','nexus123'].includes(p.toLowerCase()))bits=5;const lv=bits<40?'weak':bits<60?'fair':bits<80?'strong':'excellent';
 $('pwbar').style.width=Math.min(100,bits)+'%';$('pwbar').style.background=bits<40?'var(--rd)':bits<60?'var(--am)':'var(--ok)';$('o7').textContent=p?bits+' bits of entropy: '+lv:'Checked in your browser. Nothing is sent anywhere.'}
@@ -205,3 +240,26 @@ function saveState(){try{const s={};SAVE.forEach(i=>{if($(i))s[i]=$(i).value});l
 function resetState(){try{localStorage.removeItem('nf-state')}catch(e){}location.reload()}
 (function(){if(!$('tab-data'))return;try{const s=JSON.parse(localStorage.getItem('nf-state')||'{}');SAVE.forEach(i=>{if(typeof s[i]==='string'&&$(i))$(i).value=s[i]})}catch(e){}
 document.addEventListener('input',e=>{if(e.target&&SAVE.includes(e.target.id))saveState()})})();
+function snapshot(){const s={};SAVE.forEach(i=>{if($(i))s[i]=$(i).value});return s}
+function applySnapshot(s){SAVE.forEach(i=>{if(s&&typeof s[i]==='string'&&$(i))$(i).value=s[i]});saveState()}
+function sessionsList(){try{const a=JSON.parse(localStorage.getItem('nf-sessions')||'[]');return Array.isArray(a)?a:[]}catch(e){return[]}}
+function putSessions(a){try{localStorage.setItem('nf-sessions',JSON.stringify(a.slice(0,20)))}catch(e){const s=$('shst');if(s)s.textContent='Could not save: browser storage is full or blocked.'}}
+function drawSessions(){const l=$('sessions');if(!l)return;const a=sessionsList();
+l.innerHTML=a.length?a.map((x,i)=>'<li><span>'+esc(x.name)+'</span> <button class="btn alt sm" type="button" data-act="loadSession" data-i="'+i+'">Load</button> <button class="btn alt sm" type="button" data-act="deleteSession" data-i="'+i+'">Delete</button></li>').join(''):'<li class="empty">No saved sessions yet.</li>'}
+function saveSession(){const n=($('sname').value||'').trim().slice(0,40)||'Session '+new Date().toLocaleString(),a=sessionsList().filter(x=>x.name!==n);a.unshift({name:n,at:Date.now(),data:snapshot()});putSessions(a);drawSessions();$('shst').textContent='Saved "'+n+'" on this device.'}
+function loadSession(el){const x=sessionsList()[Number(el.dataset.i)];if(!x)return;applySnapshot(x.data);$('shst').textContent='Loaded "'+x.name+'". Go to the Data tab and run the analysis.'}
+function deleteSession(el){const a=sessionsList();a.splice(Number(el.dataset.i),1);putSessions(a);drawSessions()}
+async function packSnapshot(){const cs=new Blob([JSON.stringify(snapshot())]).stream().pipeThrough(new CompressionStream('gzip')),b=new Uint8Array(await new Response(cs).arrayBuffer());let bin='';b.forEach(x=>{bin+=String.fromCharCode(x)});return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+async function unpackSnapshot(t){const bin=atob(String(t).replace(/-/g,'+').replace(/_/g,'/')),u=Uint8Array.from(bin,c=>c.charCodeAt(0)),ds=new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'));return JSON.parse(await new Response(ds).text())}
+function shareBase(){return location.origin+location.pathname.replace(/#.*$/,'')}
+function showLink(u,msg){$('shareurl').value=u;$('shst').textContent=msg}
+async function shareLink(){try{const z=await packSnapshot();if(z.length>6000){$('shst').textContent='This workspace is too large for a link in the address. Use "Download report", or create a short link if it is available.';return}
+showLink(shareBase()+'#z='+z,'Link created. Your data is inside the link itself and is not stored anywhere.')}catch(e){$('shst').textContent='Could not create the link in this browser.'}}
+async function shortLink(){const h=await HEALTH;if(!API||!h||!(h.caps||[]).includes('share')){$('shst').textContent='Short links are not enabled on this site.';return}
+try{const r=await call('/api/share',{data:snapshot()});showLink(shareBase()+'#id='+r.id,'Short link created. Your inputs are stored on the server for '+r.days+' days, and anyone with the link can open them.')}catch(e){$('shst').textContent='Could not create the short link. '+(e.message==='offline'?'':'Try again later.')}}
+async function copyShare(){const u=$('shareurl').value;if(!u){$('shst').textContent='Create a link first.';return}try{await navigator.clipboard.writeText(u);$('shst').textContent='Link copied.'}catch(e){try{$('shareurl').select();document.execCommand('copy');$('shst').textContent='Link copied.'}catch(x){$('shst').textContent='Copy failed. Select the link and copy it manually.'}}}
+async function loadShared(){const h=location.hash.slice(1);if(!/^(z|id)=/.test(h))return;const n=$('notice');
+try{let d;if(h.startsWith('z='))d=await unpackSnapshot(h.slice(2));else{const hh=await HEALTH;if(!API||!hh||!(hh.caps||[]).includes('share'))throw new Error('Short links are not enabled on this site.');const r=await fetch(API+'/api/share?id='+encodeURIComponent(h.slice(3)));if(!r.ok)throw new Error((await r.json()).error||'The link could not be opened.');d=(await r.json()).data}
+applySnapshot(d);showTab('data');if(n)n.textContent='Shared workspace loaded. Press the analysis buttons to run it.';try{history.replaceState(null,'',location.pathname)}catch(e){}}
+catch(e){if(n)n.textContent='Could not open this shared link: '+e.message}}
+(function(){if(!$('tab-data'))return;drawSessions();loadShared();addEventListener('hashchange',loadShared);HEALTH.then(h=>{const c=h&&h.caps||[],b=$('shortbtn'),a=$('authcard');if(b&&c.includes('share'))b.hidden=false;if(a&&c.includes('auth'))a.hidden=false})})();

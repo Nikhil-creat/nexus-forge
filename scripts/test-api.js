@@ -4,6 +4,7 @@ const assert = require('assert');
 const ai = require('../frontend/api/_ai.js');
 const chat = require('../frontend/api/chat.js');
 const health = require('../frontend/api/health.js');
+const share = require('../frontend/api/share.js');
 let n = 0, failed = 0;
 async function t(name, fn) { try { await fn(); n++; console.log('pass', name); } catch (e) { failed++; console.log('FAIL', name, '\n  ', e && e.message); } }
 const enc = new TextEncoder();
@@ -85,7 +86,7 @@ const mkReq = (o) => Object.assign({ method: 'POST', headers: { host: 'x.vercel.
   });
   // ---- handlers
   const saved = { fetch: global.fetch, env: { ...process.env } };
-  const reset = () => { for (const k of Object.keys(process.env)) if (/_API_KEY$/.test(k)) delete process.env[k]; chat._reset(); ai._cache.clear(); global.fetch = saved.fetch; };
+  const reset = () => { share._reset(); for (const k of Object.keys(process.env)) if (/_API_KEY$|^UPSTASH_|^KV_/.test(k)) delete process.env[k]; chat._reset(); ai._cache.clear(); global.fetch = saved.fetch; };
   await t('chat: rejects GET, bad origin and bad input', async () => {
     reset(); let r = mkRes(); await chat(mkReq({ method: 'GET' }), r); assert.strictEqual(r.code, 405);
     r = mkRes(); await chat(mkReq({ headers: { host: 'x.vercel.app', origin: 'https://evil.example' } }), r); assert.strictEqual(r.code, 403);
@@ -132,6 +133,45 @@ const mkReq = (o) => Object.assign({ method: 'POST', headers: { host: 'x.vercel.
     reset(); process.env.DAILY_LIMIT = '2'; process.env.RATE_LIMIT = '100'; let last;
     for (let i = 0; i < 3; i++) { last = mkRes(); await chat(mkReq({ body: { message: 'hi' } }), last); }
     delete process.env.DAILY_LIMIT; delete process.env.RATE_LIMIT; assert.strictEqual(last.code, 429); assert.match(last.body.error, /daily request limit/);
+  });
+
+  // ---- RAG persona and share links
+  function kv() { const m = new Map(); const calls = []; const f = async (url, o) => { const a = JSON.parse(o.body); calls.push(a); if (a[0] === 'SET') { if (a.includes('NX') && m.has(a[1])) return { ok: true, json: async () => ({ result: null }) }; m.set(a[1], a[2]); return { ok: true, json: async () => ({ result: 'OK' }) }; } if (a[0] === 'GET') return { ok: true, json: async () => ({ result: m.has(a[1]) ? m.get(a[1]) : null }) }; return { ok: false, status: 400 }; }; return { f, m, calls }; }
+  const withKv = () => { process.env.UPSTASH_REDIS_REST_URL = 'https://kv.example'; process.env.UPSTASH_REDIS_REST_TOKEN = 'tok'; };
+  await t('chat: rag persona accepts long context and uses the grounding prompt; others keep the 2000 limit', async () => {
+    reset(); process.env.GROQ_API_KEY = 'gsk_r'; const log = [];
+    global.fetch = mock({ list: res(GROQ_LIST), chat: [res({ choices: [{ message: { content: 'a [1]' } }] })] }, log);
+    let r = mkRes(); await chat(mkReq({ body: { message: 'x'.repeat(5000), persona: 'rag' } }), r); assert.strictEqual(r.code, 200);
+    assert.ok(log.find(x => x.body).body.messages[0].content.includes('Cite passages'));
+    r = mkRes(); await chat(mkReq({ body: { message: 'x'.repeat(3000) } }), r); assert.strictEqual(r.code, 400);
+    r = mkRes(); await chat(mkReq({ body: { message: 'x'.repeat(7000), persona: 'rag' } }), r); assert.strictEqual(r.code, 400);
+  });
+  await t('share: disabled without a database, and health does not advertise it', async () => {
+    reset(); let r = mkRes(); await share(mkReq({ body: { data: { csv: 'a' } } }), r); assert.strictEqual(r.code, 503);
+    r = mkRes(); health(mkReq({ method: 'GET' }), r); assert.ok(!r.body.caps.includes('share'));
+  });
+  await t('share: stores only known string fields, returns a 10 character id and reads it back', async () => {
+    reset(); withKv(); const k = kv(); global.fetch = k.f;
+    let r = mkRes(); await share(mkReq({ body: { data: { csv: 'a,b\n1,2', evil: '<script>', xs: 5, q: 'hello' } } }), r);
+    assert.strictEqual(r.code, 200); assert.match(r.body.id, /^[A-Za-z0-9]{10}$/); assert.strictEqual(r.body.days, 30);
+    const setCall = k.calls.find(c => c[0] === 'SET'); assert.ok(setCall.includes('EX') && setCall.includes(2592000) && setCall.includes('NX'));
+    assert.deepStrictEqual(JSON.parse(k.m.get('share:' + r.body.id)), { csv: 'a,b\n1,2', q: 'hello' });
+    const g = mkRes(); await share(mkReq({ method: 'GET', query: { id: r.body.id }, body: {} }), g); assert.strictEqual(g.code, 200); assert.strictEqual(g.body.data.csv, 'a,b\n1,2');
+    const h = mkRes(); health(mkReq({ method: 'GET' }), h); assert.ok(h.body.caps.includes('share'));
+  });
+  await t('share: validates ids, size, emptiness, origin and missing links', async () => {
+    reset(); withKv(); global.fetch = kv().f;
+    let r = mkRes(); await share(mkReq({ method: 'GET', query: { id: '../etc' }, body: {} }), r); assert.strictEqual(r.code, 400);
+    r = mkRes(); await share(mkReq({ method: 'GET', query: { id: 'abcdefghij' }, body: {} }), r); assert.strictEqual(r.code, 404);
+    r = mkRes(); await share(mkReq({ body: { data: { unknown: 'x' } } }), r); assert.strictEqual(r.code, 400);
+    r = mkRes(); await share(mkReq({ body: { data: { csv: 'x'.repeat(150000), doc: 'y'.repeat(100000) } } }), r); assert.strictEqual(r.code, 413);
+    r = mkRes(); await share(mkReq({ headers: { host: 'x.vercel.app', origin: 'https://evil.example' }, body: { data: { csv: 'a' } } }), r); assert.strictEqual(r.code, 403);
+    r = mkRes(); await share(mkReq({ method: 'PUT', body: {} }), r); assert.strictEqual(r.code, 405);
+  });
+  await t('share: rate limit and store outage are handled', async () => {
+    reset(); withKv(); process.env.SHARE_RATE_LIMIT = '2'; global.fetch = kv().f; let last;
+    for (let i = 0; i < 3; i++) { last = mkRes(); await share(mkReq({ body: { data: { csv: 'a' } } }), last); } assert.strictEqual(last.code, 429); delete process.env.SHARE_RATE_LIMIT;
+    share._reset(); global.fetch = async () => { throw new Error('down'); }; const r = mkRes(); await share(mkReq({ body: { data: { csv: 'a' } } }), r); assert.strictEqual(r.code, 502);
   });
   await t('health: advertises the chat capability only when a key exists', () => {
     reset(); let r = mkRes(); health(mkReq({ method: 'GET' }), r); assert.deepStrictEqual(r.body.caps, []);
