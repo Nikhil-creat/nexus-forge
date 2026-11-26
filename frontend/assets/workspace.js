@@ -91,8 +91,93 @@ if(name==='word/document.xml'){const start=off+30+dv.getUint16(off+26,true)+dv.g
 return new TextDecoder().decode(raw).replace(/<\/w:p>/g,'\n\n').replace(/<w:tab\/>/g,' ').replace(/<[^>]+>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&')}
 p+=46+nl+el+cl}
 throw new Error('No text was found in this .docx file.')}
+function bin2str(u){let s='';for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return s}
+async function inflateZ(u8){const ds=new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate'));return new Uint8Array(await new Response(ds).arrayBuffer())}
+function a85(u8){let s=bin2str(u8).replace(/\s/g,'');if(s.startsWith('<~'))s=s.slice(2);const e=s.indexOf('~>');if(e>=0)s=s.slice(0,e);const out=[],t=[];let cnt=0;
+for(const ch of s){if(ch==='z'&&cnt===0){out.push(0,0,0,0);continue}const v=ch.charCodeAt(0)-33;if(v<0||v>84)continue;t[cnt++]=v;if(cnt===5){let n=0;for(let k=0;k<5;k++)n=n*85+t[k];out.push((n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255);cnt=0}}
+if(cnt>1){for(let k=cnt;k<5;k++)t[k]=84;let n=0;for(let k=0;k<5;k++)n=n*85+t[k];out.push(...[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].slice(0,cnt-1))}return new Uint8Array(out)}
+function ahex(u8){const h=bin2str(u8).split('>')[0].replace(/[^0-9A-Fa-f]/g,'');const o=[];for(let i=0;i<h.length;i+=2)o.push(parseInt(h.substr(i,2).padEnd(2,'0'),16));return new Uint8Array(o)}
+function bal(d,j,o,c){let depth=0,i=j;while(i<d.length){if(d.startsWith(o,i)){depth++;i+=o.length}else if(d.startsWith(c,i)){depth--;i+=c.length;if(!depth)return d.slice(j,i)}else i++}return d.slice(j)}
+function pval(d,key){if(!d)return null;const m=new RegExp('/'+key+'(?![A-Za-z0-9])').exec(d);if(!m)return null;let j=m.index+key.length+1;while(j<d.length&&/\s/.test(d[j]))j++;
+if(d.startsWith('<<',j))return bal(d,j,'<<','>>');if(d[j]==='[')return bal(d,j,'[',']');const r=/^(\d+)\s+(\d+)\s+R/.exec(d.slice(j,j+30));if(r)return r[0];const t=/^\/?[^\s/<>\[\]()]+/.exec(d.slice(j,j+80));return t?t[0]:null}
+function hex2str(h){if(h.length<=2)return String.fromCharCode(parseInt(h||'0',16));let o='';for(let i=0;i+3<=h.length;i+=4)o+=String.fromCharCode(parseInt(h.substr(i,4),16));return o}
+function parseCMap(t){const m=new Map();let bytes=0;const cs=/begincodespacerange\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/.exec(t);if(cs)bytes=cs[1].length/2;
+for(const blk of t.matchAll(/beginbfchar([\s\S]*?)endbfchar/g))for(const x of blk[1].matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]*)>/g))m.set(parseInt(x[1],16),hex2str(x[2]));
+for(const blk of t.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)){const re=/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(<[0-9A-Fa-f]*>|\[[^\]]*\])/g;let x;
+while((x=re.exec(blk[1]))){const lo=parseInt(x[1],16),hi=parseInt(x[2],16);
+if(x[3][0]==='<'){const b=hex2str(x[3].slice(1,-1));for(let c=lo;c<=hi&&c-lo<65536;c++)m.set(c,b.slice(0,-1)+String.fromCharCode(b.charCodeAt(b.length-1)+c-lo))}
+else{const arr=[...x[3].matchAll(/<([0-9A-Fa-f]*)>/g)];for(let c=lo;c<=hi&&c-lo<arr.length;c++)m.set(c,hex2str(arr[c-lo][1]))}}}
+return{map:m,bytes}}
+function pdfTokens(cs,h){let i=0;const n=cs.length,st=[],stack=[];const push=v=>{(stack.length?stack[stack.length-1]:st).push(v)};
+while(i<n){const ch=cs[i];
+if(/[\s\0]/.test(ch)){i++;continue}
+if(ch==='%'){while(i<n&&cs[i]!=='\n'&&cs[i]!=='\r')i++;continue}
+if(ch==='('){let d=1,o='';i++;while(i<n){const c=cs[i];
+if(c==='\\'){const x=cs[i+1];if(x==='n')o+='\n';else if(x==='r')o+='\r';else if(x==='t')o+='\t';else if(x==='b')o+='\b';else if(x==='f')o+='\f';
+else if(x!==undefined&&/[0-7]/.test(x)){let cnt=1;while(cnt<3&&/[0-7]/.test(cs[i+1+cnt]||''))cnt++;o+=String.fromCharCode(parseInt(cs.substr(i+1,cnt),8)&255);i+=1+cnt;continue}
+else if(x!=='\r'&&x!=='\n'&&x!==undefined)o+=x;i+=2;continue}
+if(c==='(')d++;else if(c===')'){d--;if(!d){i++;break}}o+=c;i++}push({s:o});continue}
+if(ch==='<'&&cs[i+1]==='<'){let d=0;while(i<n){if(cs.startsWith('<<',i)){d++;i+=2}else if(cs.startsWith('>>',i)){d--;i+=2;if(!d)break}else i++}continue}
+if(ch==='<'){const e=cs.indexOf('>',i);let hx=cs.slice(i+1,e<0?n:e).replace(/\s/g,'');if(hx.length%2)hx+='0';let o='';for(let k=0;k<hx.length;k+=2)o+=String.fromCharCode(parseInt(hx.substr(k,2),16));push({s:o});i=e<0?n:e+1;continue}
+if(ch==='['){stack.push([]);i++;continue}
+if(ch===']'){const a=stack.pop();if(a)push({a});i++;continue}
+if(ch==='/'){let j=i+1;while(j<n&&!/[\s/<>\[\]()%]/.test(cs[j]))j++;push({n:cs.slice(i+1,j)});i=j;continue}
+const nm=/^[+-]?(\d+\.?\d*|\.\d+)/.exec(cs.substr(i,24));if(nm){push(parseFloat(nm[0]));i+=nm[0].length;continue}
+let j=i;while(j<n&&!/[\s/<>\[\]()%]/.test(cs[j]))j++;if(j===i)j=i+1;const op=cs.slice(i,j);i=j;
+if(op==='BI'){const e=cs.indexOf('EI',i);i=e<0?n:e+2;st.length=0;continue}
+h(op,st.slice());st.length=0}}
+function pdfShow(str,f){const t=pdfDecode(str,f);let w=0;if(f&&f.wf){const b=f.bytes||1;for(let i=0;i+b<=str.length;i+=b){let c=0;for(let k=0;k<b;k++)c=c*256+str.charCodeAt(i+k);w+=f.wf(c)/1000}}return{t,w}}
+function pdfDecode(str,f){if(f&&f.map){let o='';for(let i=0;i+f.bytes<=str.length;i+=f.bytes){let c=0;for(let k=0;k<f.bytes;k++)c=c*256+str.charCodeAt(i+k);const t=f.map.get(c);if(t!==undefined)o+=t}return o}if(f&&f.t0)return'';return str.replace(/[\x00-\x08\x0b-\x1f]/g,'')}
+function pdfPage(cs,fonts){let out='',font=null,lastY=null,fsz=1,adv=0;const nl=()=>{if(out&&!out.endsWith('\n'))out+='\n'},sp=()=>{if(out&&!/\s$/.test(out))out+=' '},last=a=>a[a.length-1];
+pdfTokens(cs,(op,a)=>{
+if(op==='Tf'){const nm=a[a.length-2];if(nm&&nm.n!==undefined)font=fonts[nm.n]||null;const sz=last(a);if(typeof sz==='number')fsz=Math.abs(sz)||1}
+else if(op==='Tj'){const x=last(a);if(x&&x.s!==undefined){const r=pdfShow(x.s,font);out+=r.t;adv+=r.w}}
+else if(op==='TJ'){const arr=last(a);if(arr&&arr.a)for(const it of arr.a){if(it&&it.s!==undefined){const r=pdfShow(it.s,font);out+=r.t;adv+=r.w}else if(typeof it==='number'){adv-=it/1000;if(it<-200)sp()}}}
+else if(op==="'"||op==='"'){nl();const x=last(a);if(x&&x.s!==undefined)out+=pdfDecode(x.s,font)}
+else if(op==='T*')nl();
+else if(op==='Td'||op==='TD'){const ty=last(a),tx=a[a.length-2];if(typeof ty==='number'&&Math.abs(ty)>0.5)nl();else if(typeof tx==='number'&&tx>0&&(tx-adv*fsz)>0.18*fsz)sp();adv=0}
+else if(op==='Tm'){const y=last(a);if(typeof y==='number'){if(lastY!==null&&Math.abs(y-lastY)>1)nl();else sp();lastY=y}}
+else if(op==='ET')sp()});
+return out}
+async function pdfText(ab){const u=new Uint8Array(ab),s=bin2str(u);
+if(s.slice(0,5)!=='%PDF-')throw new Error('This is not a valid PDF file.');
+if(/\/Encrypt\s*(\d|<|\/)/.test(s))throw new Error('This PDF is encrypted, so its text cannot be read here. Remove the protection or paste the text instead.');
+const O={},re=/(\d+)\s+(\d+)\s+obj\b/g;let m;
+while((m=re.exec(s))){const st=m.index+m[0].length,e=s.indexOf('endobj',st),body=e<0?s.slice(st):s.slice(st,e),dm=/>>\s*stream\r?\n/.exec(body);
+if(dm){const ds=st+dm.index+dm[0].length,de=s.indexOf('endstream',ds);O[+m[1]]={d:body.slice(0,dm.index+2),a:ds,b:de<0?(e<0?s.length:e):de}}else O[+m[1]]={d:body};
+re.lastIndex=e<0?s.length:e+6}
+async function sdata(o){if(!o||o.a===undefined)return null;let a=o.a,b=o.b;const lm=!/\/Length\s+\d+\s+\d+\s+R/.test(o.d)&&/\/Length\s+(\d+)/.exec(o.d);
+if(lm&&a+ +lm[1]<=b+2)b=a+ +lm[1];else while(b>a&&(u[b-1]===10||u[b-1]===13))b--;
+let data=u.subarray(a,b);const f=/\/Filter\s*(\[[^\]]*\]|\/\w+)/.exec(o.d),fs=f?f[1]:'';
+for(const x of fs.matchAll(/\/(\w+)/g)){const nm=x[1];
+if(nm==='ASCII85Decode'||nm==='A85')data=a85(data);else if(nm==='ASCIIHexDecode'||nm==='AHx')data=ahex(data);else if(nm==='FlateDecode'||nm==='Fl'){try{data=await inflateZ(data)}catch(e){return null}}else return null}
+return data}
+for(const k of Object.keys(O)){const o=O[k];if(o.a!==undefined&&/\/Type\s*\/ObjStm/.test(o.d)){try{const data=await sdata(o);if(!data)continue;const t=bin2str(data),N=+/\/N\s+(\d+)/.exec(o.d)[1],F=+/\/First\s+(\d+)/.exec(o.d)[1],hd=t.slice(0,F).trim().split(/\s+/).map(Number);
+for(let i=0;i<N;i++){const on=hd[2*i],off=hd[2*i+1],end=i+1<N?hd[2*i+3]:t.length-F;O[on]={d:t.slice(F+off,F+end)}}}catch(e){}}}
+const refNum=v=>{const x=v&&/^(\d+)\s+\d+\s+R$/.exec(String(v).trim());return x?+x[1]:null},dict=v=>{const n=refNum(v);return n&&O[n]?O[n].d:v};
+let cat=null;for(const k of Object.keys(O)){if(/\/Type\s*\/Catalog\b/.test(O[k].d)){cat=O[k].d;break}}
+const pages=[];(function walk(d,res,depth){if(!d||depth>40)return;const ty=pval(d,'Type'),r=pval(d,'Resources')||res;
+if(ty==='/Pages'){const ks=String(dict(pval(d,'Kids'))||'');for(const x of ks.matchAll(/(\d+)\s+\d+\s+R/g)){const o=O[+x[1]];if(o)walk(o.d,r,depth+1)}}
+else if(ty==='/Page'||pval(d,'Contents')){pages.push({c:pval(d,'Contents'),r})}})(cat?dict(pval(cat,'Pages')):null,null,0);
+const FC={};async function finfo(n){if(FC[n])return FC[n];const d=O[n]?O[n].d:'',t0=/\/Subtype\s*\/Type0/.test(d),tu=refNum(pval(d,'ToUnicode'));let map=null,bytes=t0?2:1;
+if(tu&&O[tu]){const data=await sdata(O[tu]);if(data){const c=parseCMap(bin2str(data));map=c.map;if(c.bytes)bytes=c.bytes}}let wf=null;
+if(t0){const dfv=String(dict(pval(d,'DescendantFonts'))||pval(d,'DescendantFonts')||''),dr=/(\d+)\s+\d+\s+R/.exec(dfv),cd=dr&&O[+dr[1]]?O[+dr[1]].d:'',dw=+pval(cd,'DW')||1000,wm=new Map();
+const W=String(dict(pval(cd,'W'))||'').trim().replace(/^\[/,'').replace(/\]$/,''),tk2=[...W.matchAll(/\[([^\]]*)\]|(-?[\d.]+)/g)].map(x=>x[1]!==undefined?{a:x[1].trim().split(/\s+/).map(Number)}:{n:parseFloat(x[2])});
+for(let i=0;i<tk2.length;){const t=tk2[i];if(t.n===undefined){i++;continue}const nx=tk2[i+1];if(nx&&nx.a){nx.a.forEach((w,k)=>wm.set(t.n+k,w));i+=2}else if(nx&&nx.n!==undefined&&tk2[i+2]&&tk2[i+2].n!==undefined){for(let c=t.n;c<=nx.n&&c-t.n<65536;c++)wm.set(c,tk2[i+2].n);i+=3}else i++}
+wf=c=>wm.has(c)?wm.get(c):dw}
+else{const fc=+pval(d,'FirstChar')||0,wa=(String(dict(pval(d,'Widths'))||'').match(/-?[\d.]+/g)||[]).map(Number);if(wa.length)wf=c=>wa[c-fc]!==undefined?wa[c-fc]:500}
+return FC[n]={map,bytes,t0,wf}}
+const texts=[];
+for(const p of pages){const fonts={},fd=dict(pval(String(dict(p.r)||''),'Font'))||'';
+for(const x of String(fd).matchAll(/\/([^\s/<>\[\]()]+)\s+(\d+)\s+\d+\s+R/g))fonts[x[1]]=await finfo(+x[2]);
+let cs='';const cv=String(dict(p.c)||'');const refs=/^\s*\[/.test(cv)||refNum(p.c)===null?[...cv.matchAll(/(\d+)\s+\d+\s+R/g)].map(x=>+x[1]):[refNum(p.c)];
+for(const n of refs){const data=await sdata(O[n]);if(data)cs+=bin2str(data)+'\n'}
+texts.push(pdfPage(cs,fonts))}
+const text=texts.join('\n\n').replace(/[ \t]+/g,' ').replace(/ ?\n ?/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
+if(text.replace(/\s/g,'').length<10)throw new Error('No readable text was found in this PDF. Scanned or image-only PDFs need OCR, which is not supported.');
+return text}
 async function readDoc(f){const n=f.name.toLowerCase();
-if(n.endsWith('.pdf'))throw new Error('PDF files cannot be read in the browser yet. Copy the text and paste it instead.');
+if(n.endsWith('.pdf'))return pdfText(await f.arrayBuffer());
 if(n.endsWith('.docx'))return docxText(await f.arrayBuffer());
 const t=await f.text();
 if(/\.html?$/.test(n)){const d=new DOMParser().parseFromString(t,'text/html');d.querySelectorAll('script,style').forEach(e=>e.remove());return d.body.textContent}

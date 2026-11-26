@@ -1,0 +1,5 @@
+Embedded TrueType text with accents: café, naïve, über, señor.
+Numbers 12345 and symbols % & @ are included.
+The quick brown fox jumps over the lazy dog.
+
+

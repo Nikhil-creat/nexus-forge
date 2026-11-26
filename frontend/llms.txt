@@ -9,6 +9,7 @@ Nexus Forge is a static site with serverless functions on Vercel. Every tool als
 - [Security lab](https://nexus-forge-frontend.vercel.app/security/): AES-256-GCM encrypted notes, SHA-256 file fingerprints and log analysis
 - [Projects](https://nexus-forge-frontend.vercel.app/projects/): selected machine learning and data engineering projects
 - [Architecture](https://nexus-forge-frontend.vercel.app/architecture/): technology stack and how the parts connect
+- [Resume](https://nexus-forge-frontend.vercel.app/resume/): printable resume with education, internships, projects and certifications
 - [Credentials](https://nexus-forge-frontend.vercel.app/about/): education, internships and certifications
 - [FAQ](https://nexus-forge-frontend.vercel.app/faq/): hosting and configuration questions
 

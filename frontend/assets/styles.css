@@ -104,3 +104,6 @@ label{display:block;margin:12px 0 4px;font-size:12px;letter-spacing:.04em;text-t
 #chatlog p{margin:8px 0;padding:10px 12px;border-radius:12px;background:#140d08;border:1px solid var(--line);font-size:14px;line-height:1.55;white-space:pre-wrap}
 #chatlog p.me{background:rgba(255,154,60,.12);border-color:#5a3418;color:#ffd9b0;margin-left:10%}#chatlog p:empty{display:none}
 pre.out,div.out{font-size:12.5px;line-height:1.55}div.out{background:#050302;border:1px solid var(--line);border-radius:8px;padding:12px;margin:12px 0 0}
+
+.resume h2{font-size:1.1rem;border-bottom:1px solid var(--line);padding-bottom:4px;margin:22px 0 8px}.resume p{margin:6px 0}.resume ul{margin:6px 0;padding-left:20px}.rlinks a{color:var(--cy)}
+@media print{@page{margin:11mm 13mm}body,body.inner{background:#fff!important;color:#000!important;font-size:9.6pt;line-height:1.42}.resume h2{break-after:avoid;margin:11px 0 5px!important}.resume p{margin:3px 0!important}.resume ul{margin:3px 0!important}.resume .sub{margin:0 0 2px!important}header,footer,.crumbs,.noprint,.skip,noscript{display:none!important}main>section{padding:0!important;max-width:none!important}.resume h1{font-size:20pt;color:#000}.resume .sub,.resume p,.resume li{color:#000!important}.resume h2{color:#000;border-color:#000;font-size:12pt}a,.rlinks a{color:#000!important;text-decoration:none}}

@@ -1,0 +1,22 @@
+Quarterly Security Report
+The AI proxy keeps provider keys on the server and limits requests per visitor. Résumé of
+findings: café, naïve, über, “smart quotes” and an em dash — plus the ligature fi in ﬁnancial
+reports.
+
+Findings
+• Brute-force attempts rose by 40 percent.
+• No SQL injection succeeded.
+• Bold item and italic item.
+Region
+
+Events
+
+Hyderabad 1200
+Chennai
+
+845
+
+Second page: the daily budget stops abuse of the key, and BM25 ranking finds passages
+quickly. Contact: sriramojunikhil66@gmail.com.
+
+

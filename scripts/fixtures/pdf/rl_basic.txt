@@ -1,0 +1,8 @@
+Nexus Forge keeps API keys on the server.
+Rates and limits apply per visitor, with a daily budget.
+Analysis tools run in your browser and never upload files.
+
+Second page about document retrieval with BM25 ranking.
+Passages are cited as [1] and [2] in answers.
+
+

@@ -18,7 +18,8 @@ Static pages plus Vercel Functions. Every tool also works in the browser with no
 - **Voice:** speak your question (English, Telugu or Hindi, via the browser's speech service) and optionally have answers read aloud.
 
 ## Documents, sessions, sharing and Telugu
-- **Documents:** upload .txt, .md, .csv, .json, .html or .docx files (read in the browser, never uploaded). Passages are ranked with BM25 and the answer cites its sources. PDF is not supported yet.
+- **Documents:** upload .txt, .md, .csv, .json, .html, .docx or .pdf files (read in the browser, never uploaded). Passages are ranked with BM25 and the answer cites its sources. PDFs need selectable text (checked against pdftotext on files from Chromium, LibreOffice, wkhtmltopdf and reportlab); scanned PDFs need OCR and encrypted PDFs are refused with a clear message.
+- **Resume:** `/resume/` is a one-page, print-ready resume (use Print, then Save as PDF). Phone number and CGPA are intentionally not shown on the public page.
 - **Sessions:** save named snapshots of your workspace on this device.
 - **Share links:** `Create share link` puts the (compressed) workspace inside the link, nothing is stored. Optional `short link` stores it on the server for 30 days; it appears only when a database is connected (see below).
 - **Telugu:** language selector in the header and footer. Static interface text is translated (`frontend/assets/te.js`, loaded only when needed); tool results and AI answers appear in the language you ask in.
